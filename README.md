@@ -6,6 +6,7 @@ Dockerized auto crypto-coin trader based on Coinbase (uses CoinBase's Advanced T
 [![Docker Pulls](https://img.shields.io/docker/pulls/royen99/cryptobot-trader?logo=docker)](https://hub.docker.com/r/royen99/cryptobot-trader)
 [![CI/CD](https://github.com/royen99/cryptobot-trader/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/royen99/cryptobot-trader/actions/workflows/docker-publish.yml)
 [![Stars](https://img.shields.io/github/stars/royen99/cryptobot-trader?logo=github)](https://github.com/royen99/cryptobot-trader)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
 
