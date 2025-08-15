@@ -1,4 +1,4 @@
-import jwt, os, aiohttp, asyncio, secrets, json, time, requests
+import jwt, os, aiohttp, asyncio, secrets, json, time, requests, random
 from cryptography.hazmat.primitives import serialization
 from collections import deque
 import psycopg2 # type: ignore
@@ -6,6 +6,12 @@ from psycopg2.extras import Json # type: ignore
 from decimal import Decimal
 import pandas as pd
 import numpy as np
+from aiohttp import ClientTimeout
+
+# Network/Retry settings
+NET_MAX_RETRIES = 5
+NET_BASE_BACKOFF = 0.5   # seconds
+NET_TIMEOUT = ClientTimeout(total=12, sock_connect=6, sock_read=6)
 
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False") == "True"  # Set to True for debugging
 
@@ -155,6 +161,19 @@ def load_state(symbol):
         cursor.close()
         conn.close()
 
+# Create a single session to reuse connections (better perf & fewer TLS handshakes)
+_aiohttp_session: aiohttp.ClientSession | None = None
+
+async def get_http_session() -> aiohttp.ClientSession:
+    global _aiohttp_session
+    if _aiohttp_session is None or _aiohttp_session.closed:
+        _aiohttp_session = aiohttp.ClientSession(timeout=NET_TIMEOUT)
+    return _aiohttp_session
+
+async def jitter_backoff(attempt: int) -> float:
+    # exponential backoff with a small random jitter
+    return NET_BASE_BACKOFF * (2 ** attempt) + random.uniform(0, 0.2)
+
 def build_jwt(uri):
     """Generate a JWT token for Coinbase API authentication."""
     private_key_bytes = key_secret.encode("utf-8")
@@ -177,34 +196,86 @@ def build_jwt(uri):
 
     return jwt_token if isinstance(jwt_token, str) else jwt_token.decode("utf-8")
 
-async def api_request(method, path, body=None):
-    """Send authenticated requests to Coinbase API asynchronously."""
+async def api_request(method: str, path: str, body=None):
+    """
+    Resilient Coinbase API request with retries, backoff, and timeouts.
+    Returns parsed JSON or None on persistent failure.
+    """
+    session = await get_http_session()
     uri = f"{method} {request_host}{path}"
     jwt_token = build_jwt(uri)
 
     headers = {
         "Authorization": f"Bearer {jwt_token}",
         "Content-Type": "application/json",
-        "CB-VERSION": "2024-02-05"
+        "CB-VERSION": "2024-02-05",
     }
 
     url = f"https://{request_host}{path}"
-    async with aiohttp.ClientSession() as session:
-        async with session.request(method, url, headers=headers, json=body) as response:
-            if response.status == 200:
-                return await response.json()
-            else:
-                return {"error": await response.text()}
+    last_err = None
 
-async def get_crypto_price(crypto_symbol):
-    """Fetch cryptocurrency price from Coinbase asynchronously."""
-    path = f"/api/v3/brokerage/products/{crypto_symbol}-{quote_currency}"
-    data = await api_request("GET", path)
-    
-    if "price" in data:
-        return float(data["price"])  # Return the full precision price
-    
-    print(f"Error fetching {crypto_symbol} price: {data.get('error', 'Unknown error')}")
+    for attempt in range(NET_MAX_RETRIES):
+        try:
+            async with session.request(method, url, headers=headers, json=body) as resp:
+                # Happy path
+                if 200 <= resp.status < 300:
+                    # some coinbase endpoints return empty body on 204
+                    return await (resp.json() if resp.content_type == "application/json" else resp.text())
+
+                # Rate limited -> honor Retry-After header if present
+                if resp.status == 429:
+                    retry_after = resp.headers.get("Retry-After")
+                    wait = float(retry_after) if retry_after else await jitter_backoff(attempt)
+                    print(f"⏳ 429 Too Many Requests. Retrying after {wait:.2f}s (attempt {attempt+1}/{NET_MAX_RETRIES})")
+                    await asyncio.sleep(wait)
+                    continue
+
+                # Transient server errors -> retry
+                if resp.status >= 500:
+                    wait = await jitter_backoff(attempt)
+                    text = await resp.text()
+                    print(f"⚠️ Server error {resp.status}: {text[:200]}... Retrying in {wait:.2f}s (attempt {attempt+1}/{NET_MAX_RETRIES})")
+                    await asyncio.sleep(wait)
+                    continue
+
+                # Client errors (400-499 excluding 429) -> usually don't retry
+                text = await resp.text()
+                print(f"❌ API request failed: {resp.status} {text[:300]}")
+                return None
+
+        except asyncio.CancelledError:
+            # If the process is being shut down, propagate the cancellation
+            raise
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            last_err = e
+            wait = await jitter_backoff(attempt)
+            print(f"🌐 Network/timeout error: {type(e).__name__}: {e}. Retrying in {wait:.2f}s (attempt {attempt+1}/{NET_MAX_RETRIES})")
+            await asyncio.sleep(wait)
+        except Exception as e:
+            last_err = e
+            print(f"❗ Unexpected error during api_request: {e}")
+            break
+
+    print(f"🚫 Giving up after {NET_MAX_RETRIES} attempts. Last error: {last_err}")
+    return None
+
+async def get_crypto_price(crypto_symbol: str):
+    """Fetch cryptocurrency price from Coinbase. Returns float or None."""
+    data = await api_request("GET", f"/api/v3/brokerage/products/{crypto_symbol}-{quote_currency}")
+    if not data:
+        print(f"⚠️ Failed to fetch {crypto_symbol} price (no data).")
+        return None
+
+    # Adapt to actual payload (Coinbase product endpoint often returns nested product info)
+    try:
+        if "price" in data:
+            return float(data["price"])
+        if "product" in data and "price" in data["product"]:
+            return float(data["product"]["price"])
+    except Exception as e:
+        print(f"⚠️ Malformed price response for {crypto_symbol}: {e} -> {str(data)[:200]}")
+
+    print(f"⚠️ Price not found in response for {crypto_symbol}.")
     return None
 
 def update_balances(balances):
@@ -818,9 +889,6 @@ async def trading_bot():
                 price_slope = current_price - price_history[-3]
 
                 # Execute buy order if signals are confirmed
-
-                # ----------------- BUY decision (debuggable) -----------------
-                # Build named sub-conditions
                 cond_bollinger_primary = (bollinger_lower is None or current_price < bollinger_lower)
 
                 cond_stoch_part = (k is None or d is None or (k < 0.2 and k > d))
@@ -844,7 +912,7 @@ async def trading_bot():
                 cond_balance = (balances[quote_currency] > 0)
                 cond_manual = (crypto_data[symbol].get("manual_cmd") == "BUY")
 
-                # Full BUY condition (same structure as your original)
+                # Full BUY condition
                 auto_buy_condition = (
                     cond_entry_band
                     and (cond_price_thresh or cond_rebuy_discount)
@@ -935,7 +1003,6 @@ async def trading_bot():
                         )
                     )
                     and actual_buy_price is not None  # ✅ Ensure actual_buy_price is valid before using it
-                    # and previous_price is not None and current_price < previous_price  # ✅ Price is lower than previous price
                     and current_price > actual_buy_price * (1 + (dynamic_sell_threshold / 100))  # ✅ Profit percentage wanted based on sell threshold
                     and crypto_data[symbol].get("falling_streak", 0) > 1  # ✅ Ensure we’re not in a rising streak
                     and balances[symbol] > 0  # ✅ Ensure we have balance
@@ -999,7 +1066,6 @@ async def trading_bot():
                 print(f"🔥  - {symbol} Skipping trade: Price deviation too high!")
                 print(f"📊  - Moving Average: {moving_avg:.{price_precision}f}, Current Price: {current_price:.{price_precision}f}")
                 print(f"📉  - Deviation: {deviation:.2f} ({deviation_percentage:.2f}%)")
-                # send_telegram_notification(message)
 
             print(f"📊  - {symbol} Avg buy price: {actual_buy_price} | Slope: {price_slope} | Performance - Total Trades: {crypto_data[symbol]['total_trades']} | Total Profit: ${crypto_data[symbol]['total_profit']:.2f}")
             crypto_data[symbol]["manual_cmd"] = None  # Set to None at the start of each cycle

@@ -13,7 +13,7 @@ Dockerized auto crypto-coin trader based on Coinbase (uses CoinBase's Advanced T
 ✅ Directly makes the API request (using JWT's).\
 ✅ Handles API responses & errors, printing available balances or errors properly.\
 ✅ Uses config.json for credentials, keeping them separate from the script. \
-✅ Integrates with the CryptoBot-Monitor dashboard for real-time monitoring and alerts.
+✅ Integrates with the [CryptoBot-Monitor](https://github.com/royen99/cryptobot-monitor) dashboard for real-time monitoring and alerts.
 
 ## How It Works
 
@@ -85,3 +85,52 @@ Make sure to rename it to `config.json` and fill in your details and place it in
    ```bash
    docker run -d --name cryptobot-trader royen99/cryptobot-trader
    ```
+
+When adding coins to the `config.json` file, ensure you follow the same structure as the sample entries.
+Each coin should have its own section with the necessary parameters.
+
+Take care of the proper `precision` settings for each coin (`price` and `amount`).
+When in doubt, you can check the Coinbase API documentation ([XRP Example](https://api.exchange.coinbase.com/currencies/XRP)) for the correct values.
+
+## Configuration options explained:
+
+### Generic options
+
+Option | Description
+--- | ---
+`name` | The name of the API key (e.g., `organizations/{org_id}/apiKeys/{key_id}`).
+`privateKey` | The private key for the API key (must be kept secret).
+`buy_percentage` | The percentage of the account balance to use for buying (default: 10).
+`sell_percentage` | The percentage of the coin balance to use for selling (default: 100).
+`buy_offset_percent` | The percentage offset for buy orders (default: -0.2).
+`sell_offset_percent` | The percentage offset for sell orders (default: 0.2).
+`trail_percent` | The percentage for the trailing stop (default: 1).
+`telegram` | Telegram bot settings.
+`database` | Database connection settings.
+`coins` | Configuration for each coin to trade.
+
+### Coin specific options
+
+Option | Description
+--- | ---
+`enabled` | Whether trading is enabled for this coin (default: true).
+`trail_percent` | The percentage for the trailing stop (default: 1).
+`buy_percentage` | The percentage of the account balance to use for buying (default: -4).
+`sell_percentage` | The percentage of the coin balance to use for selling (default: 3).
+`rebuy_discount` | The percentage discount for rebuying (default: 2).
+`volatility_window` | The window size for calculating volatility (default: 20).
+`trend_window` | The window size for calculating trend (default: 200).
+`macd_short_window` | The short window size for MACD (default: 12).
+`macd_long_window` | The long window size for MACD (default: 26).
+`macd_signal_window` | The signal window size for MACD (default: 9).
+`rsi_period` | The period for RSI calculation (default: 50).
+`min_order_sizes` | The minimum order sizes for buying and selling.
+`precision` | The precision settings for price and amount.
+
+## Donations
+If you find this project useful and would like to support its development, consider making a donation:
+
+- BTC: `bc1qy5wu6vrxpclycl2y0wgnjjdxfd2qde7xemphgt`
+- ETH: `0xe9128E8cc47bCab918292E2a0aE0C25971bb61EA`
+- SOL: `ASwSbGHvcvebyPEUJRoE9aq3b2H2oJSaM7GsZAt83bjR`
+- Via [CoinBase](https://commerce.coinbase.com/checkout/00370bad-7220-4115-b15f-cda931756c6a)
