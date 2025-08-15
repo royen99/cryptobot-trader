@@ -29,13 +29,13 @@ See the `config.json.template` file for the full example (some scripts utilize a
 
 ✅ Uses a PostgreSQL database backend for saving and loading price history and trading state.\
 ✅ Asynchronous API requests, improving performance and responsiveness.\
-✅ Concurrent Price Fetching. Fetches prices for all cryptocurrencies simultaneously.\
 ✅ Trades multiple cryptocurrencies with configurable settings.\
 ✅ Moving Average Convergence Divergence (MACD) to identify trend direction and momentum.\
 ✅ Relative Strength Index (RSI) to identify overbought and oversold conditions.\
 ✅ Integrated MACD and RSI signals into the trading strategy. \
 ✅ Inspects bollinger bands to determine price volatility and potential breakouts. \
-✅ Calculates stochastic RSI indicator for additional momentum analysis.
+✅ Calculates stochastic RSI indicator for additional momentum analysis. \
+✅ Rebuy signals based on market conditions to reach dollar-cost averaging.
 
 🚨 Note that the various indicators will only function with enough data points (depending on your settings).
 
@@ -56,5 +56,26 @@ Example output:
 📈 ETH Rising Streak: 6
 🚀 ETH - Current Price: $4651.57 (1.81%), Peak Price: $4667.23, Trailing Stop Price: $4620.56
 💔 ETH: Price is above Bollinger Upper Band ($4649.60) — sell signal!
-📊  - ETH Avg buy price: None | Slope: 5.509999999999309 | Performance - Total Trades: 47 | Total Profit: $31.05
+📊  - ETH Avg buy price: None | Slope: 5.509999999999309 | Performance - Total Trades: 47 | Total Profit: $3108.05
+📉 SOL Falling Streak: 1
+🚀 SOL - Current Price: $195.13 (-2.43%), Peak Price: $198.20, Trailing Stop Price: $196.22
+🔥 SOL Stochastic RSI Buy Signal: K = 0.18, D = 0.10
+📊  - SOL Avg buy price: 192.33007217066984 | Slope: 0.09000000000000341 | Performance - Total Trades: 199 | Total Profit: $935.37
 ```
+
+## Installation
+
+Prepare your PostgreSQL database by using the `init_db.sql` file. This will create the necessary tables and schema.
+
+Use the supplied config.json.template file for your CoinBase API credentials, database connection settings, and other configurations. \
+Make sure to rename it to `config.json` and fill in your details and place it in the appropriate directory. (.env by default)
+
+1. Use the Docker Compose file to start the services:
+   ```bash
+   docker-compose -f docker-compose-sample.yml up -d
+   ```
+
+2. Run the Docker container directly:
+   ```bash
+   docker run -d --name cryptobot-trader royen99/cryptobot-trader
+   ```
