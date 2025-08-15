@@ -1,0 +1,14 @@
+pyjwt
+cryptography
+requests
+coinbase
+attrs
+idna_ssl
+aiohttp
+async_timeout
+charset_normalizer
+async_timeout
+yarl
+psycopg2
+numpy
+pandas
