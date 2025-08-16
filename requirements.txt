@@ -1,13 +1,13 @@
 pyjwt
 cryptography
-requests
+requests>=2.32.3
 attrs
 idna_ssl
-aiohttp
+aiohttp>=3.12.14
 async_timeout
 charset_normalizer
 async_timeout
 yarl
 psycopg2
-numpy
-pandas
+numpy>=2.2.0
+pandas>=2.2.2
