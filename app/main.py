@@ -673,12 +673,13 @@ async def trading_bot():
         # Fetch prices for all cryptocurrencies concurrently
         price_tasks = [get_crypto_price(symbol) for symbol in crypto_symbols]
         prices = await asyncio.gather(*price_tasks)
-        price_precision = coins_config[symbol]["precision"]["price"]  # Get the decimal places from config
 
         # 🧠 Refresh manual commands for this cycle
         await process_manual_commands()
 
         for symbol, current_price in zip(crypto_symbols, prices):
+            price_precision = coins_config[symbol]["precision"]["price"]  # Get the decimal places from config
+
             if not current_price:
                 print(f"🚨 {symbol}: No price data. Skipping.")
                 continue
