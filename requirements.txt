@@ -1,7 +1,6 @@
 pyjwt
 cryptography
 requests
-coinbase
 attrs
 idna_ssl
 aiohttp
