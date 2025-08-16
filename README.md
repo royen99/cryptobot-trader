@@ -6,6 +6,7 @@ Dockerized auto crypto-coin trader based on Coinbase (uses CoinBase's Advanced T
 [![Docker Pulls](https://img.shields.io/docker/pulls/royen99/cryptobot-trader?logo=docker)](https://hub.docker.com/r/royen99/cryptobot-trader)
 [![CI/CD](https://github.com/royen99/cryptobot-trader/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/royen99/cryptobot-trader/actions/workflows/docker-publish.yml)
 [![Stars](https://img.shields.io/github/stars/royen99/cryptobot-trader?logo=github)](https://github.com/royen99/cryptobot-trader)
+[![Multi-Arch Support](https://img.shields.io/badge/arch-linux%2Famd64%20%7C%20linux%2Farm64-blue?logo=docker)](https://hub.docker.com/r/royen99/cryptobot-trader/tags)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
@@ -13,7 +14,9 @@ Dockerized auto crypto-coin trader based on Coinbase (uses CoinBase's Advanced T
 ✅ Directly makes the API request (using JWT's).\
 ✅ Handles API responses & errors, printing available balances or errors properly.\
 ✅ Uses config.json for credentials, keeping them separate from the script. \
-✅ Integrates with the [CryptoBot-Monitor](https://github.com/royen99/cryptobot-monitor) dashboard for real-time monitoring and alerts.
+✅ Integrates with the [CryptoBot-Monitor](https://github.com/royen99/cryptobot-monitor) dashboard for real-time monitoring and alerts. \
+✅ Supports multiple cryptocurrencies with configurable settings. \
+✅ Telegram bot integration for notifications on buy/sell actions.
 
 ## How It Works
 
@@ -91,6 +94,15 @@ Each coin should have its own section with the necessary parameters.
 
 Take care of the proper `precision` settings for each coin (`price` and `amount`).
 When in doubt, you can check the Coinbase API documentation ([XRP Example](https://api.exchange.coinbase.com/currencies/XRP)) for the correct values.
+
+## Pair with Cryptobot Monitor
+
+The [Cryptobot Monitor](https://github.com/royen99/cryptobot-monitor) can be coupled with the trading bot to provide real-time monitoring and alerts based on market conditions. This allows for more informed trading decisions and the ability to react quickly to changing market dynamics.
+
+It also features a web-based dashboard for visualizing trading performance, market trends, manual buy/sell actions, and more. \
+
+### Example Cryptobot Monitor UI Screenshot
+![Example UI Screenshot](https://github.com/royen99/cryptobot-monitor/blob/main/mainview.png?raw=true)
 
 ## Configuration options explained:
 
