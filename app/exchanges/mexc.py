@@ -14,9 +14,9 @@ class MEXCExchange(Exchange):
     Auth: HMAC SHA256 over totalParams with secretKey; send 'timestamp' (ms) and 'signature'.
     Header: X-MEXC-APIKEY
     Base URL: https://api.mexc.com
-    Quote default: USDT
+    Quote default: Use quote_currency from config, default USDT
     """
-    def __init__(self, api_key: str, secret_key: str, quote_currency: str = "USDT", base_url: str = "https://api.mexc.com"):
+    def __init__(self, api_key: str, secret_key: str, quote_currency: str, base_url: str = "https://api.mexc.com"):
         self.name = "mexc"
         self.api_key = api_key
         self.secret_key = secret_key.encode("utf-8")
