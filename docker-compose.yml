@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PG_DB:-trader}
+      POSTGRES_USER: ${PG_USER:-trader}
+      POSTGRES_PASSWORD: ${PG_PASS:-traderpass}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - cryptonet
+    logging:
+      driver: "local"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  trader:
+    build: .
+    image: cryptobot-trader:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      CONFIG_PATH: /config/config.json
+      LOG_LEVEL: INFO
+    volumes:
+      - .env/config.json:/config/config.json:ro
+    command: ["python", "-u", "main.py"]
+    networks:
+      - cryptonet
+    logging:
+      driver: "local"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+# Networks and Volumes
+networks:
+  cryptonet:
+    driver: bridge
+
+volumes:
+  pgdata:
