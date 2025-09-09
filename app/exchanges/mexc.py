@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time, hmac, hashlib, asyncio
+from collections import OrderedDict
 from typing import Optional, Dict, Any
 from urllib.parse import urlencode
 from decimal import Decimal, ROUND_DOWN, getcontext
@@ -116,19 +117,16 @@ class MEXCExchange(Exchange):
         return None
 
     # --- account ---
-    async def get_balances(self) -> Dict[str, float]:
-        # Signed GET /api/v3/account with timestamp and signature
-        params = {"timestamp": self._ts()}
-        total_params = urlencode(params)
-        sig = self._sign(total_params)
-
-        # For signed GET, send signature & timestamp as query
-        data = await self._request("GET", "/api/v3/account", params={**params, "signature": sig}, signed=True)
-        out: Dict[str, float] = {}
+    async def get_balances(self) -> dict[str, float]:
+        pairs = [("timestamp", str(self._ts())), ("recvWindow", "5000")]
+        qs = urlencode(pairs, doseq=True)
+        sig = self._sign(qs)
+        params = OrderedDict(pairs + [("signature", sig)])
+        data = await self._request("GET", "/api/v3/account", params=params, signed=True)
+        out = {}
         try:
             for b in data.get("balances", []):
                 ccy = b.get("asset")
-                # prefer 'available', fall back to 'free'
                 val = b.get("available") or b.get("free") or "0"
                 out[ccy] = float(val)
         except Exception:
@@ -141,52 +139,119 @@ class MEXCExchange(Exchange):
                                 quote_amount: float | None = None,
                                 client_order_id: str | None = None) -> dict | bool:
         sym = f"{base_symbol}{self.quote_currency}"
-        info = await self._symbol_info(sym)
+
+        # helpers
+        async def _symbol_info():
+            data = await self._request("GET", "/api/v3/exchangeInfo", params={"symbols": sym})
+            if isinstance(data, dict) and data.get("symbols"):
+                return data["symbols"][0]
+            return {}
+
+        async def _book_ticker():
+            return await self._request("GET", "/api/v3/ticker/bookTicker", params={"symbol": sym})
+
+        def _step_from_precision(p, default="0.00000001"):
+            try:
+                d = Decimal(str(p))
+                if d == 0 or d == int(d):
+                    return Decimal("1") / (Decimal(10) ** int(d))
+                return d
+            except Exception:
+                return Decimal(default)
+
+        def _quantize(value: float, step: Decimal) -> str:
+            v = Decimal(str(value))
+            q = (v / step).to_integral_value(rounding=ROUND_DOWN) * step
+            s = format(q, "f")
+            return s.rstrip("0").rstrip(".") or "0"
+
+        def _fmt_price(px: float, decimals: int = 8) -> str:
+            s = f"{px:.{max(0, int(decimals))}f}"
+            return s.rstrip("0").rstrip(".") or "0"
+
+        def _signed_params(pairs: list[tuple[str, str]]) -> dict:
+            # sign EXACTLY the encoded query we will send (no sorting)
+            qs = urlencode(pairs, doseq=True)
+            sig = self._sign(qs)
+            pairs_with_sig = pairs + [("signature", sig)]
+            # preserve insertion order
+            return OrderedDict(pairs_with_sig)
+
+        info = await _symbol_info()
         allowed = set(info.get("orderTypes", []))
-        recv = 5000
+        recv = "5000"
 
-        # Always return the API response so the caller sees errors
-        def _send(params: dict):
-            params["timestamp"] = self._ts()
-            params["recvWindow"] = recv
-            if client_order_id:
-                params["newClientOrderId"] = client_order_id
-            # sign & send
-            to_sign = "&".join([f"{k}={params[k]}" for k in sorted(params.keys())])
-            params["signature"] = self._sign(to_sign)
-            return self._request("POST", "/api/v3/order", params=params, signed=True)
-
-        # If symbol supports MARKET, use it
+        # MARKET path
         if "MARKET" in allowed:
             if side.upper() == "BUY":
-                if quote_amount is None: return {"error":"quote_amount required for BUY"}
-                return await _send({"symbol": sym, "side": side.upper(), "type": "MARKET",
-                                    "quoteOrderQty": f"{quote_amount:.2f}", "newOrderRespType": "FULL"})
-            else:
-                if base_amount is None: return {"error":"base_amount required for SELL"}
-                qty = f"{base_amount:.8f}".rstrip("0").rstrip(".")
-                return await _send({"symbol": sym, "side": side.upper(), "type": "MARKET",
-                                    "quantity": qty, "newOrderRespType": "FULL"})
+                if quote_amount is None:
+                    return {"error": "quote_amount required for BUY"}
+                pairs = [
+                    ("symbol", sym),
+                    ("side", side.upper()),
+                    ("type", "MARKET"),
+                    ("quoteOrderQty", f"{quote_amount:.2f}"),
+                    ("newOrderRespType", "FULL"),
+                    ("timestamp", str(self._ts())),
+                    ("recvWindow", recv),
+                ]
+                if client_order_id:
+                    pairs.insert(0, ("newClientOrderId", client_order_id))
+                params = _signed_params(pairs)
+                return await self._request("POST", "/api/v3/order", params=params, signed=True)
 
-        # Fallback: aggressive LIMIT using bookTicker (MARKET not allowed on this pair)
-        book = await self._book_ticker(sym)
+            else:
+                if base_amount is None:
+                    return {"error": "base_amount required for SELL"}
+                qty = f"{base_amount:.8f}".rstrip("0").rstrip(".")
+                pairs = [
+                    ("symbol", sym),
+                    ("side", side.upper()),
+                    ("type", "MARKET"),
+                    ("quantity", qty),
+                    ("newOrderRespType", "FULL"),
+                    ("timestamp", str(self._ts())),
+                    ("recvWindow", recv),
+                ]
+                if client_order_id:
+                    pairs.insert(0, ("newClientOrderId", client_order_id))
+                params = _signed_params(pairs)
+                return await self._request("POST", "/api/v3/order", params=params, signed=True)
+
+        # LIMIT fallback (pair doesn’t allow MARKET)
+        book = await _book_ticker()
         if not isinstance(book, dict) or "askPrice" not in book or "bidPrice" not in book:
             return {"error": "bookTicker unavailable", "symbol": sym}
 
         bid = float(book["bidPrice"]); ask = float(book["askPrice"])
-        nudge_bps = 10  # 0.10% “slippage” to push fill
-        if side.upper() == "BUY":
-            px = ask * (1 + nudge_bps / 10_000)
-            if quote_amount is None: return {"error":"quote_amount required for BUY"}
-            base_step = self._step_from_precision(info.get("baseSizePrecision", "0.00000001"))
-            qty = float(Decimal(str(quote_amount)) / Decimal(str(px)))
-            qty_str = self._quantize(qty, base_step)
-        else:
-            px = bid * (1 - nudge_bps / 10_000)
-            if base_amount is None: return {"error":"base_amount required for SELL"}
-            base_step = self._step_from_precision(info.get("baseSizePrecision", "0.00000001"))
-            qty_str = self._quantize(base_amount, base_step)
+        nudge_bps = 10  # 0.10% to push fill
+        base_step = _step_from_precision(info.get("baseSizePrecision", "0.0001"))
+        quote_dec = int(info.get("quotePrecision", 4))
 
-        price_str = self._fmt_price(px, int(info.get("quotePrecision", 8)))
-        return await _send({"symbol": sym, "side": side.upper(), "type": "LIMIT",
-                            "price": price_str, "quantity": qty_str})
+        if side.upper() == "BUY":
+            if quote_amount is None:
+                return {"error": "quote_amount required for BUY"}
+            px = ask * (1 + nudge_bps / 10_000)
+            qty = float(Decimal(str(quote_amount)) / Decimal(str(px)))
+            qty_str = _quantize(qty, base_step)
+        else:
+            if base_amount is None:
+                return {"error": "base_amount required for SELL"}
+            px = bid * (1 - nudge_bps / 10_000)
+            qty_str = _quantize(base_amount, base_step)
+
+        price_str = _fmt_price(px, quote_dec)
+        pairs = [
+            ("symbol", sym),
+            ("side", side.upper()),
+            ("type", "LIMIT"),
+            ("price", price_str),
+            ("quantity", qty_str),
+            ("timestamp", str(self._ts())),
+            ("recvWindow", recv),
+        ]
+        if client_order_id:
+            pairs.insert(0, ("newClientOrderId", client_order_id))
+        params = _signed_params(pairs)
+        return await self._request("POST", "/api/v3/order", params=params, signed=True)
+
