@@ -1,0 +1,14 @@
+pyjwt
+cryptography
+requests>=2.32.3
+attrs
+idna_ssl
+aiohttp>=3.12.14
+async_timeout
+charset_normalizer
+async_timeout
+yarl
+psycopg2
+numpy>=2.2.0
+pandas>=2.2.2
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
