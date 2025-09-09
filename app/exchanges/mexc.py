@@ -120,6 +120,8 @@ class MEXCExchange(Exchange):
             "side": side.upper(),
             "type": "MARKET",
             "timestamp": self._ts(),
+            "recvWindow": 5000,
+            "newOrderRespType": "FULL",
         }
         if client_order_id:
             body["newClientOrderId"] = client_order_id
