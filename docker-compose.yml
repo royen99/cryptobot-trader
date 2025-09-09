@@ -35,8 +35,8 @@ services:
       CONFIG_PATH: /config/config.json
       LOG_LEVEL: INFO
     volumes:
-      - .env/config.json:/config/config.json:ro
-    command: ["python", "-u", "main.py"]
+      - ./env/config.json:/config/config.json:ro
+    command: ["python", "-m", "app.main"]
     networks:
       - cryptonet
     logging:

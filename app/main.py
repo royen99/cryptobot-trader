@@ -44,6 +44,10 @@ exchange_cfg = config.get("exchange", {})
 exchange: Exchange = create_exchange(exchange_cfg)
 quote_currency = exchange.quote_currency
 
+# --- Global sizing (order size) ---
+SIZE_BUY_PCT  = float(abs(config.get("buy_percentage", 20)))   # e.g. 20 => buy 20% of quote balance
+SIZE_SELL_PCT = float(abs(config.get("sell_percentage", 100))) # e.g. 100 => sell 100% of base balance
+
 # ----------------- DB helpers -----------------
 def get_db_connection():
     conn = psycopg2.connect(
@@ -491,7 +495,8 @@ async def trading_bot():
                     for r in reasons: print("  -", r["name"], ":", r["detail"])
 
                 if buy_condition:
-                    quote_cost = round((cs["buy_percentage"] / 100) * balances.get(quote_currency, 0), 2)
+                    quote_avail = float(balances.get(quote_currency, 0))
+                    quote_cost  = round(quote_avail * (SIZE_BUY_PCT / 100.0), 2)
                     if quote_cost < cs["min_order_sizes"]["buy"]:
                         print(f"🚫 Buy too small: ${quote_cost:.2f} (min: ${cs['min_order_sizes']['buy']})")
                         crypto_data[symbol]["manual_cmd"] = None
@@ -520,7 +525,10 @@ async def trading_bot():
                     crypto_data[symbol].get("falling_streak", 0) > 1 and
                     balances.get(symbol, 0) > 0
                 ) or crypto_data[symbol].get("manual_cmd") == "SELL":
-                    sell_amount = (cs["sell_percentage"] / 100) * balances.get(symbol, 0)
+                    sell_pct    = SIZE_SELL_PCT / 100.0
+                    precision   = cs["precision"]["amount"]
+                    base_free   = float(balances.get(symbol, 0))
+                    sell_amount = round(base_free * sell_pct, precision)
                     precision = cs["precision"]["amount"]
                     sell_amount = round(sell_amount, precision)
                     safe_margin = 10 ** -precision

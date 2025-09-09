@@ -220,3 +220,5 @@ config.yml
 *.local
 local/
 .vscode/
+config.json
+.env/
