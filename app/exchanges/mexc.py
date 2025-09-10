@@ -126,6 +126,26 @@ class MEXCExchange(Exchange):
         return None
 
     # --- account ---
+    async def get_balances(self) -> Dict[str, float]:
+        # Signed GET /api/v3/account with timestamp and signature
+        params = {"timestamp": self._ts()}
+        total_params = urlencode(params)
+        sig = self._sign(total_params)
+
+        # For signed GET, send signature & timestamp as query
+        data = await self._request("GET", "/api/v3/account", params={**params, "signature": sig}, signed=True)
+        out: Dict[str, float] = {}
+        try:
+            for b in data.get("balances", []):
+                ccy = b.get("asset")
+                # prefer 'available', fall back to 'free'
+                val = b.get("available") or b.get("free") or "0"
+                out[ccy] = float(val)
+        except Exception:
+            pass
+        return out
+
+    # --- account ---
     async def place_market_order(self, base_symbol: str, side: str,
                                 base_amount: float | None = None,
                                 quote_amount: float | None = None,
