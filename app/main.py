@@ -504,13 +504,19 @@ async def trading_bot():
                         buy_amount = quote_cost / current_price
                         print(f"💰 Buying {buy_amount:.6f} {symbol} (~{quote_cost:.2f} {quote_currency})")
                         resp = await exchange.place_market_order(symbol, "BUY", quote_amount=quote_cost)
-                        if isinstance(resp, dict) and ("orderId" in resp or resp.get("success")):
+                        if isinstance(resp, dict) and resp.get("ok"):
+                            base_filled = float(resp["base_qty"])
+                            avg_px      = float(resp["avg_px"])
+                            await log_trade(symbol, "BUY", base_filled, avg_px)
+
                             crypto_data[symbol]["manual_cmd"] = None
                             crypto_data[symbol]["total_trades"] += 1
                             crypto_data[symbol]["last_buy_time"] = time.time()
                             updated_avg = get_weighted_avg_buy_price(symbol)
                             save_weighted_avg_buy_price(symbol, updated_avg)
-                            send_telegram_notification(f"✅ BOUGHT {buy_amount:.4f} {symbol} at ${current_price:.{price_precision}f} {quote_currency}")
+                            send_telegram_notification(
+                                f"✅ BOUGHT {base_filled:.4f} {symbol} @ ${avg_px:.{price_precision}f} {quote_currency}"
+                            )
                             crypto_data[symbol]["peak_price"] = current_price
                         else:
                             print(f"🚫 Buy order failed for {symbol}: {resp}")
@@ -539,22 +545,29 @@ async def trading_bot():
                         print(f"💵 Selling {sell_amount:.{precision}f} {symbol} at {current_price:.2f}!")
                         actual_buy_price = get_weighted_avg_buy_price(symbol)
                         resp = await exchange.place_market_order(symbol, "SELL", base_amount=sell_amount)
-                        if isinstance(resp, dict) and ("orderId" in resp or resp.get("success")):
+                        if isinstance(resp, dict) and resp.get("ok"):
+                            base_filled = float(resp["base_qty"])
+                            avg_px      = float(resp["avg_px"])
+                            await log_trade(symbol, "SELL", base_filled, avg_px)
+
                             crypto_data[symbol]["total_trades"] += 1
+                            actual_buy_price = get_weighted_avg_buy_price(symbol)
                             if actual_buy_price:
-                                profit = (current_price - actual_buy_price) * sell_amount
+                                profit = (avg_px - actual_buy_price) * base_filled
                                 crypto_data[symbol]["total_profit"] += profit
-                                print(f"💰 {symbol} Profit: (Sell {current_price:.{price_precision}f} - Buy {actual_buy_price:.{price_precision}f}) * {sell_amount:.4f} = {profit:.2f} {quote_currency}")
+                                print(f"💰 {symbol} Profit: (Sell {avg_px:.{price_precision}f} - Buy {actual_buy_price:.{price_precision}f}) * {base_filled:.4f} = {profit:.2f} {quote_currency}")
                             else:
                                 print("⚠️ No buy data; profit skipped.")
                             long_ma = long_term_ma
                             crypto_data[symbol]["initial_price"] = long_ma
                             print(f"🔄 {symbol} Initial reset to Long MA: {long_ma:.{price_precision}f}")
                             save_weighted_avg_buy_price(symbol, None)
-                            send_telegram_notification(f"🚀 SOLD {sell_amount:.4f} {symbol} at ${current_price:.{price_precision}f} {quote_currency}")
+                            send_telegram_notification(
+                                f"🚀 SOLD {base_filled:.4f} {symbol} @ ${avg_px:.{price_precision}f} {quote_currency}"
+                            )
                             crypto_data[symbol]["manual_cmd"] = None
                         else:
-                            print(f"🚫 Sell order failed for {symbol}: {resp}")
+                            print("🚫 Sell order failed.", resp)
             else:
                 deviation = abs(current_price - moving_avg)
                 deviation_pct = (deviation / moving_avg) * 100

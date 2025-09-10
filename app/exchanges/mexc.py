@@ -33,6 +33,11 @@ class MEXCExchange(Exchange):
     def _sign(self, params_str: str) -> str:
         return hmac.new(self.secret_key, params_str.encode("utf-8"), hashlib.sha256).hexdigest()
 
+    def _signed_params(self, pairs: list[tuple[str, str]]) -> OrderedDict:
+        qs = urlencode(pairs, doseq=True)           # EXACT string we'll send
+        sig = self._sign(qs)
+        return OrderedDict(pairs + [("signature", sig)])
+
     async def _symbol_info(self, sym: str) -> dict:
         data = await self._request("GET", "/api/v3/exchangeInfo", params={"symbols": sym})
         if isinstance(data, dict) and data.get("symbols"):
@@ -42,24 +47,28 @@ class MEXCExchange(Exchange):
     async def _book_ticker(self, sym: str) -> dict:
         return await self._request("GET", "/api/v3/ticker/bookTicker", params={"symbol": sym})
 
-    def _step_from_precision(self, p: str | int | float, default="0.00000001") -> Decimal:
+    async def _query_order(self, sym: str, order_id: str) -> dict:
+        pairs = [("symbol", sym), ("orderId", order_id), ("timestamp", str(self._ts())), ("recvWindow", "5000")]
+        params = self._signed_params(pairs)
+        return await self._request("GET", "/api/v3/order", params=params, signed=True)
+
+    def _step_from_precision(self, p, default="0.00000001"):
         try:
-            s = Decimal(str(p))
-            # if p looks like a step (e.g. "0.0001"), keep it; if it's an int of decimals, convert
-            if s == 0 or s == int(s):
-                return Decimal("1") / (Decimal(10) ** int(s))
-            return s
+            d = Decimal(str(p))
+            if d == 0 or d == int(d):
+                return Decimal("1") / (Decimal(10) ** int(d))
+            return d
         except Exception:
             return Decimal(default)
 
     def _quantize(self, value: float, step: Decimal) -> str:
         v = Decimal(str(value))
         q = (v / step).to_integral_value(rounding=ROUND_DOWN) * step
-        out = format(q, "f")
-        return out.rstrip("0").rstrip(".") or "0"
+        s = format(q, "f")
+        return s.rstrip("0").rstrip(".") or "0"
 
-    def _fmt_price(self, price: float, decimals: int = 8) -> str:
-        s = f"{price:.{max(0, int(decimals))}f}"
+    def _fmt_price(self, px: float, decimals: int = 8) -> str:
+        s = f"{px:.{max(0, int(decimals))}f}"
         return s.rstrip("0").rstrip(".") or "0"
 
     async def _request(self, method: str, path: str, params: Dict[str, Any] | None = None, signed: bool = False, json_body: Dict[str, Any] | None = None):
@@ -117,141 +126,87 @@ class MEXCExchange(Exchange):
         return None
 
     # --- account ---
-    async def get_balances(self) -> dict[str, float]:
-        pairs = [("timestamp", str(self._ts())), ("recvWindow", "5000")]
-        qs = urlencode(pairs, doseq=True)
-        sig = self._sign(qs)
-        params = OrderedDict(pairs + [("signature", sig)])
-        data = await self._request("GET", "/api/v3/account", params=params, signed=True)
-        out = {}
-        try:
-            for b in data.get("balances", []):
-                ccy = b.get("asset")
-                val = b.get("available") or b.get("free") or "0"
-                out[ccy] = float(val)
-        except Exception:
-            pass
-        return out
-
-    # --- orders ---
     async def place_market_order(self, base_symbol: str, side: str,
                                 base_amount: float | None = None,
                                 quote_amount: float | None = None,
                                 client_order_id: str | None = None) -> dict | bool:
         sym = f"{base_symbol}{self.quote_currency}"
-
-        # helpers
-        async def _symbol_info():
-            data = await self._request("GET", "/api/v3/exchangeInfo", params={"symbols": sym})
-            if isinstance(data, dict) and data.get("symbols"):
-                return data["symbols"][0]
-            return {}
-
-        async def _book_ticker():
-            return await self._request("GET", "/api/v3/ticker/bookTicker", params={"symbol": sym})
-
-        def _step_from_precision(p, default="0.00000001"):
-            try:
-                d = Decimal(str(p))
-                if d == 0 or d == int(d):
-                    return Decimal("1") / (Decimal(10) ** int(d))
-                return d
-            except Exception:
-                return Decimal(default)
-
-        def _quantize(value: float, step: Decimal) -> str:
-            v = Decimal(str(value))
-            q = (v / step).to_integral_value(rounding=ROUND_DOWN) * step
-            s = format(q, "f")
-            return s.rstrip("0").rstrip(".") or "0"
-
-        def _fmt_price(px: float, decimals: int = 8) -> str:
-            s = f"{px:.{max(0, int(decimals))}f}"
-            return s.rstrip("0").rstrip(".") or "0"
-
-        def _signed_params(pairs: list[tuple[str, str]]) -> dict:
-            # sign EXACTLY the encoded query we will send (no sorting)
-            qs = urlencode(pairs, doseq=True)
-            sig = self._sign(qs)
-            pairs_with_sig = pairs + [("signature", sig)]
-            # preserve insertion order
-            return OrderedDict(pairs_with_sig)
-
-        info = await _symbol_info()
+        info = await self._symbol_info(sym)
         allowed = set(info.get("orderTypes", []))
         recv = "5000"
 
-        # MARKET path
+        # helper to send signed POST /order
+        async def _send(pairs: list[tuple[str, str]]) -> dict:
+            pairs += [("timestamp", str(self._ts())), ("recvWindow", recv)]
+            if client_order_id:
+                pairs.insert(0, ("newClientOrderId", client_order_id))
+            params = self._signed_params(pairs)
+            return await self._request("POST", "/api/v3/order", params=params, signed=True)
+
+        # Try MARKET if allowed
         if "MARKET" in allowed:
             if side.upper() == "BUY":
                 if quote_amount is None:
-                    return {"error": "quote_amount required for BUY"}
-                pairs = [
-                    ("symbol", sym),
-                    ("side", side.upper()),
-                    ("type", "MARKET"),
+                    return {"ok": False, "error": "quote_amount required for BUY"}
+                resp = await _send([
+                    ("symbol", sym), ("side", side.upper()), ("type", "MARKET"),
                     ("quoteOrderQty", f"{quote_amount:.2f}"),
                     ("newOrderRespType", "FULL"),
-                    ("timestamp", str(self._ts())),
-                    ("recvWindow", recv),
-                ]
-                if client_order_id:
-                    pairs.insert(0, ("newClientOrderId", client_order_id))
-                params = _signed_params(pairs)
-                return await self._request("POST", "/api/v3/order", params=params, signed=True)
-
+                ])
             else:
                 if base_amount is None:
-                    return {"error": "base_amount required for SELL"}
+                    return {"ok": False, "error": "base_amount required for SELL"}
                 qty = f"{base_amount:.8f}".rstrip("0").rstrip(".")
-                pairs = [
-                    ("symbol", sym),
-                    ("side", side.upper()),
-                    ("type", "MARKET"),
+                resp = await _send([
+                    ("symbol", sym), ("side", side.upper()), ("type", "MARKET"),
                     ("quantity", qty),
                     ("newOrderRespType", "FULL"),
-                    ("timestamp", str(self._ts())),
-                    ("recvWindow", recv),
-                ]
-                if client_order_id:
-                    pairs.insert(0, ("newClientOrderId", client_order_id))
-                params = _signed_params(pairs)
-                return await self._request("POST", "/api/v3/order", params=params, signed=True)
+                ])
 
-        # LIMIT fallback (pair doesn’t allow MARKET)
-        book = await _book_ticker()
+            if isinstance(resp, dict) and "code" not in resp:
+                q, px = self._extract_fill(resp)
+                if q and px:
+                    return {"ok": True, "base_qty": q, "avg_px": px, "raw": resp}
+            return {"ok": False, "error": resp, "raw": resp}
+
+        # Fallback: LIMIT IOC near book
+        book = await self._book_ticker(sym)
         if not isinstance(book, dict) or "askPrice" not in book or "bidPrice" not in book:
-            return {"error": "bookTicker unavailable", "symbol": sym}
+            return {"ok": False, "error": "bookTicker unavailable", "symbol": sym}
 
         bid = float(book["bidPrice"]); ask = float(book["askPrice"])
-        nudge_bps = 10  # 0.10% to push fill
-        base_step = _step_from_precision(info.get("baseSizePrecision", "0.0001"))
+        nudge_bps = 10  # 0.10%
+        base_step = self._step_from_precision(info.get("baseSizePrecision", "0.0001"))
         quote_dec = int(info.get("quotePrecision", 4))
 
         if side.upper() == "BUY":
             if quote_amount is None:
-                return {"error": "quote_amount required for BUY"}
+                return {"ok": False, "error": "quote_amount required for BUY"}
             px = ask * (1 + nudge_bps / 10_000)
             qty = float(Decimal(str(quote_amount)) / Decimal(str(px)))
-            qty_str = _quantize(qty, base_step)
+            qty_str = self._quantize(qty, base_step)
+            price_str = self._fmt_price(px, quote_dec)
         else:
             if base_amount is None:
-                return {"error": "base_amount required for SELL"}
+                return {"ok": False, "error": "base_amount required for SELL"}
             px = bid * (1 - nudge_bps / 10_000)
-            qty_str = _quantize(base_amount, base_step)
+            qty_str = self._quantize(base_amount, base_step)
+            price_str = self._fmt_price(px, quote_dec)
 
-        price_str = _fmt_price(px, quote_dec)
-        pairs = [
-            ("symbol", sym),
-            ("side", side.upper()),
-            ("type", "LIMIT"),
-            ("price", price_str),
-            ("quantity", qty_str),
-            ("timestamp", str(self._ts())),
-            ("recvWindow", recv),
-        ]
-        if client_order_id:
-            pairs.insert(0, ("newClientOrderId", client_order_id))
-        params = _signed_params(pairs)
-        return await self._request("POST", "/api/v3/order", params=params, signed=True)
+        resp = await _send([
+            ("symbol", sym), ("side", side.upper()), ("type", "LIMIT"),
+            ("timeInForce", "IOC"),
+            ("price", price_str), ("quantity", qty_str),
+        ])
 
+        # Try to resolve fill (IOC should fill immediately, else query once)
+        if isinstance(resp, dict) and "orderId" in resp:
+            q, px = self._extract_fill(resp)
+            if not (q and px):
+                # query once (fills often settle right after)
+                oq = await self._query_order(sym, str(resp["orderId"]))
+                q, px = self._extract_fill(oq)
+            if q and px:
+                return {"ok": True, "base_qty": q, "avg_px": px, "raw": resp}
+
+        return {"ok": False, "error": resp, "raw": resp}
