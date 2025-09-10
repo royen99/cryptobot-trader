@@ -71,6 +71,40 @@ class MEXCExchange(Exchange):
         s = f"{px:.{max(0, int(decimals))}f}"
         return s.rstrip("0").rstrip(".") or "0"
 
+    def _extract_fill(self, resp: dict) -> tuple[float | None, float | None]:
+        """
+        Try common shapes:
+        - executedQty + cummulativeQuoteQty
+        - fills: [{price, qty}] (sum-weighted)
+        - avgPrice + executedQty
+        Return (base_qty, avg_px)
+        """
+        try:
+            if "executedQty" in resp and "cummulativeQuoteQty" in resp:
+                q = float(resp.get("executedQty", "0") or 0)
+                cq = float(resp.get("cummulativeQuoteQty", "0") or 0)
+                if q > 0:
+                    return q, (cq / q if cq > 0 else float(resp.get("price", 0) or 0))
+            fills = resp.get("fills")
+            if isinstance(fills, list) and fills:
+                tot_qty = 0.0
+                tot_quote = 0.0
+                for f in fills:
+                    px = float(f.get("price", 0) or 0)
+                    qty = float(f.get("qty", 0) or 0)
+                    tot_qty += qty
+                    tot_quote += px * qty
+                if tot_qty > 0:
+                    return tot_qty, (tot_quote / tot_qty)
+            if "avgPrice" in resp and "executedQty" in resp:
+                q = float(resp.get("executedQty", "0") or 0)
+                ap = float(resp.get("avgPrice", "0") or 0)
+                if q > 0 and ap > 0:
+                    return q, ap
+        except Exception:
+            pass
+        return None, None
+
     async def _request(self, method: str, path: str, params: Dict[str, Any] | None = None, signed: bool = False, json_body: Dict[str, Any] | None = None):
         session = await get_http_session()
         headers = {"Content-Type": "application/json"}
