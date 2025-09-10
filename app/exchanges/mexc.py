@@ -78,33 +78,34 @@ class MEXCExchange(Exchange):
         return s.rstrip("0").rstrip(".") or "0"
 
     def _extract_fill(self, resp: dict) -> tuple[float | None, float | None]:
-        """
-        Try common shapes:
-        - executedQty + cummulativeQuoteQty
-        - fills: [{price, qty}] (sum-weighted)
-        - avgPrice + executedQty
-        Return (base_qty, avg_px)
-        """
         try:
-            if "executedQty" in resp and "cummulativeQuoteQty" in resp:
-                q = float(resp.get("executedQty", "0") or 0)
-                cq = float(resp.get("cummulativeQuoteQty", "0") or 0)
+            # executedQty + cumulative/cummulativeQuoteQty path
+            if "executedQty" in resp:
+                q = float(resp.get("executedQty") or 0)
+                cq = (resp.get("cummulativeQuoteQty") or
+                    resp.get("cumulativeQuoteQty") or
+                    resp.get("cumQuote") or
+                    resp.get("quoteQty") or 0)
+                cq = float(cq or 0)
                 if q > 0:
-                    return q, (cq / q if cq > 0 else float(resp.get("price", 0) or 0))
+                    px = cq / q if cq > 0 else float(resp.get("price") or 0)
+                    return q, px
+
+            # fills list
             fills = resp.get("fills")
             if isinstance(fills, list) and fills:
-                tot_qty = 0.0
-                tot_quote = 0.0
+                tot_q = 0.0; tot_quote = 0.0
                 for f in fills:
-                    px = float(f.get("price", 0) or 0)
-                    qty = float(f.get("qty", 0) or 0)
-                    tot_qty += qty
-                    tot_quote += px * qty
-                if tot_qty > 0:
-                    return tot_qty, (tot_quote / tot_qty)
+                    q = float(f.get("qty") or 0)
+                    px = float(f.get("price") or 0)
+                    tot_q += q; tot_quote += q * px
+                if tot_q > 0:
+                    return tot_q, (tot_quote / tot_q)
+
+            # avgPrice + executedQty
             if "avgPrice" in resp and "executedQty" in resp:
-                q = float(resp.get("executedQty", "0") or 0)
-                ap = float(resp.get("avgPrice", "0") or 0)
+                q = float(resp.get("executedQty") or 0)
+                ap = float(resp.get("avgPrice") or 0)
                 if q > 0 and ap > 0:
                     return q, ap
         except Exception:
@@ -205,6 +206,7 @@ class MEXCExchange(Exchange):
 
         # Try MARKET if allowed
         if "MARKET" in allowed:
+            base_step = self._step_from_precision(info.get("baseSizePrecision", "0.0001"))
             if side.upper() == "BUY":
                 if quote_amount is None:
                     return {"ok": False, "error": "quote_amount required for BUY"}
@@ -216,17 +218,45 @@ class MEXCExchange(Exchange):
             else:
                 if base_amount is None:
                     return {"ok": False, "error": "base_amount required for SELL"}
-                qty = f"{base_amount:.8f}".rstrip("0").rstrip(".")
+                qty_str = self._quantize(base_amount, base_step)   # 👈 respect precision
                 resp = await _send([
                     ("symbol", sym), ("side", side.upper()), ("type", "MARKET"),
-                    ("quantity", qty),
+                    ("quantity", qty_str),
                     ("newOrderRespType", "FULL"),
                 ])
 
-            if isinstance(resp, dict) and "code" not in resp:
-                q, px = self._extract_fill(resp)
+            if not isinstance(resp, dict):
+                return {"ok": False, "error": resp, "raw": resp}
+
+            order_id = str(resp.get("orderId") or resp.get("clientOrderId") or "")
+
+            # Try immediate payload
+            q, px = self._extract_fill(resp)
+
+            # If not present, poll order once or twice (fills can lag)
+            tries = 0
+            while not (q and px) and order_id and tries < 3:
+                oq = await self._query_order(sym, order_id)
+                q, px = self._extract_fill(oq)
                 if q and px:
-                    return {"ok": True, "base_qty": q, "avg_px": px, "raw": resp}
+                    break
+                tries += 1
+                await asyncio.sleep(0.15)
+
+            # Final fallback: myTrades
+            if not (q and px) and order_id:
+                trades = await self._my_trades(sym, order_id)
+                if trades:
+                    tot_q = 0.0; tot_quote = 0.0
+                    for t in trades:
+                        qty = float(t.get("qty") or 0)
+                        quote = float(t.get("quoteQty") or 0)
+                        tot_q += qty; tot_quote += quote
+                    if tot_q > 0:
+                        q = tot_q; px = tot_quote / tot_q
+
+            if q and px:
+                return {"ok": True, "base_qty": float(q), "avg_px": float(px), "raw": resp}
             return {"ok": False, "error": resp, "raw": resp}
 
         # Fallback: LIMIT IOC near book
