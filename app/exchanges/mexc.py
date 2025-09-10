@@ -52,6 +52,12 @@ class MEXCExchange(Exchange):
         params = self._signed_params(pairs)
         return await self._request("GET", "/api/v3/order", params=params, signed=True)
 
+    async def _my_trades(self, sym: str, order_id: str) -> list:
+        pairs = [("symbol", sym), ("orderId", order_id), ("timestamp", str(self._ts())), ("recvWindow", "5000")]
+        params = self._signed_params(pairs)
+        data = await self._request("GET", "/api/v3/myTrades", params=params, signed=True)
+        return data if isinstance(data, list) else []
+
     def _step_from_precision(self, p, default="0.00000001"):
         try:
             d = Decimal(str(p))
@@ -254,13 +260,36 @@ class MEXCExchange(Exchange):
         ])
 
         # Try to resolve fill (IOC should fill immediately, else query once)
-        if isinstance(resp, dict) and "orderId" in resp:
-            q, px = self._extract_fill(resp)
-            if not (q and px):
-                # query once (fills often settle right after)
-                oq = await self._query_order(sym, str(resp["orderId"]))
-                q, px = self._extract_fill(oq)
-            if q and px:
-                return {"ok": True, "base_qty": q, "avg_px": px, "raw": resp}
+        if not isinstance(resp, dict):
+            return {"ok": False, "error": resp, "raw": resp}
 
+        order_id = str(resp.get("orderId", "")) or str(resp.get("clientOrderId", ""))
+
+        # 1) Try to read fills from immediate response
+        q, px = self._extract_fill(resp)
+        if not (q and px) and order_id:
+            # 2) Query order details
+            oq = await self._query_order(sym, order_id)
+            q, px = self._extract_fill(oq)
+
+        if not (q and px) and order_id:
+            # 3) Last resort: read account trades for that orderId and average them
+            trades = await self._my_trades(sym, order_id)
+            if trades:
+                tot_qty = 0.0
+                tot_quote = 0.0
+                for t in trades:
+                    qty = float(t.get("qty", 0) or 0)
+                    quote = float(t.get("quoteQty", 0) or 0)
+                    if qty > 0:
+                        tot_qty += qty
+                        tot_quote += quote
+                if tot_qty > 0:
+                    q = tot_qty
+                    px = tot_quote / tot_qty
+
+        if q and px:
+            return {"ok": True, "base_qty": float(q), "avg_px": float(px), "raw": resp}
+
+        # no fills found; bubble up resp so caller logs it
         return {"ok": False, "error": resp, "raw": resp}
