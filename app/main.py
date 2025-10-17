@@ -1068,7 +1068,7 @@ async def trading_bot():
                 print(f"📊  - Moving Average: {moving_avg:.{price_precision}f}, Current Price: {current_price:.{price_precision}f}")
                 print(f"📉  - Deviation: {deviation:.2f} ({deviation_percentage:.2f}%)")
 
-            print(f"📊  - {symbol} Avg buy price: {actual_buy_price} | Slope: {price_slope} | Performance - Total Trades: {crypto_data[symbol]['total_trades']} | Total Profit: ${crypto_data[symbol]['total_profit']:.2f}")
+            print(f"📊  - {symbol} Avg buy price: {actual_buy_price} | Performance - Total Trades: {crypto_data[symbol]['total_trades']} | Total Profit: ${crypto_data[symbol]['total_profit']:.2f}")
             crypto_data[symbol]["manual_cmd"] = None  # Set to None at the start of each cycle
 
             # Save state after each coin's update
