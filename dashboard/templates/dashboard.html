@@ -382,11 +382,11 @@
                 const res = await fetch('/api/overview');
                 const data = await res.json();
                 
-                document.getElementById('total-profit').textContent = `$${data.total_profit_usdc}`;
-                document.getElementById('total-profit').className = 'text-2xl font-bold ' + (data.total_profit_usdc >= 0 ? 'text-green-400' : 'text-red-400');
-                document.getElementById('total-trades').textContent = data.total_trades;
-                document.getElementById('active-coins').textContent = data.active_coins;
-                document.getElementById('usdc-balance').textContent = `$${data.balances.USDC?.toFixed(2) || '0.00'}`;
+                document.getElementById('total-profit').textContent = `$${(data.total_profit_usdc || 0).toFixed(2)}`;
+                document.getElementById('total-profit').className = 'text-3xl font-bold text-white mb-1 ' + (data.total_profit_usdc >= 0 ? 'text-green-400' : 'text-red-400');
+                document.getElementById('total-trades').textContent = data.total_trades || 0;
+                document.getElementById('active-coins').textContent = data.active_coins || 0;
+                document.getElementById('usdc-balance').textContent = `$${(data.balances?.USDC || 0).toFixed(2)}`;
             } catch (err) {
                 console.error('Failed to load overview:', err);
             }
@@ -398,6 +398,12 @@
                 const data = await res.json();
                 
                 const tbody = document.getElementById('holdings-body');
+                
+                if (!data.holdings || data.holdings.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">No holdings yet. Start trading to see your positions here! 🚀</td></tr>';
+                    return;
+                }
+                
                 tbody.innerHTML = data.holdings.map(h => `
                     <tr class="hover:bg-gray-700/50 transition-colors">
                         <td class="px-4 py-3 text-white font-semibold">${h.symbol}</td>
@@ -424,6 +430,12 @@
                 const data = await res.json();
                 
                 const tbody = document.getElementById('settings-body');
+                
+                if (!data.coins || data.coins.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">No coins configured. Add coins to the database to start trading.</td></tr>';
+                    return;
+                }
+                
                 tbody.innerHTML = data.coins.map(c => `
                     <tr class="hover:bg-gray-700/50 transition-colors">
                         <td class="px-4 py-3 text-white font-semibold">${c.symbol}</td>
@@ -467,6 +479,12 @@
                 const data = await res.json();
                 
                 const tbody = document.getElementById('trades-body');
+                
+                if (!data.trades || data.trades.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-400">No trades yet. The bot will log trades here once it starts trading. ⏳</td></tr>';
+                    return;
+                }
+                
                 tbody.innerHTML = data.trades.map(t => `
                     <tr class="hover:bg-gray-700/50 transition-colors">
                         <td class="px-4 py-3 text-gray-300">${new Date(t.timestamp).toLocaleString()}</td>
