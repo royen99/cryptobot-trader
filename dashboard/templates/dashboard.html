@@ -407,8 +407,19 @@
                     return;
                 }
                 
-                console.log('Rendering', data.holdings.length, 'holdings');
-                tbody.innerHTML = data.holdings.map(h => `
+                // Filter out dust (≤ $1) and sort by value (highest first) 💎
+                const filteredHoldings = data.holdings
+                    .filter(h => h.value_usdc > 1)
+                    .sort((a, b) => b.value_usdc - a.value_usdc);
+                
+                console.log('Rendering', filteredHoldings.length, 'holdings (filtered from', data.holdings.length, ')');
+                
+                if (filteredHoldings.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">No significant holdings. All balances below $1 (dust).</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = filteredHoldings.map(h => `
                     <tr class="hover:bg-gray-700/50 transition-colors">
                         <td class="px-4 py-3 text-white font-semibold">${h.symbol}</td>
                         <td class="px-4 py-3 text-gray-300">${h.balance}</td>
