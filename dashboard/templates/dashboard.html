@@ -703,6 +703,17 @@
                 closeEditModal();
             }
         });
+
+        // 🚀 Initialize dashboard on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Dashboard initializing...');
+            // Load monitor tab data by default
+            loadOverview();
+            loadHoldings();
+            loadRecentTrades();
+            // Initialize charts
+            initCharts();
+        });
     </script>
 </body>
 </html>
