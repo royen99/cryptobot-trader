@@ -14,8 +14,9 @@ Dockerized auto crypto-coin trader based on Coinbase (uses CoinBase's Advanced T
 ✅ Directly makes the API request (using JWT's).\
 ✅ Handles API responses & errors, printing available balances or errors properly.\
 ✅ Uses config.json for credentials, keeping them separate from the script. \
+✅ **Built-in Web Dashboard** for real-time monitoring, holdings tracking, and configuration management. \
 ✅ Integrates with the [CryptoBot-Monitor](https://github.com/royen99/cryptobot-monitor) dashboard for real-time monitoring and alerts. \
-✅ Supports multiple cryptocurrencies with configurable settings. \
+✅ Supports multiple cryptocurrencies with **database-driven settings** (runtime reconfigurable). \
 ✅ Telegram bot integration for notifications on buy/sell actions.
 
 ## How It Works
@@ -74,6 +75,32 @@ Example output:
 
 ## Installation
 
+### Quick Start with Dashboard 🚀
+
+The easiest way to get started is using Docker Compose, which includes the trading bot, dashboard, and PostgreSQL:
+
+```bash
+# Copy the sample configuration
+cp config.json.template config.json
+# Edit config.json with your Coinbase API credentials
+
+# Copy and customize docker-compose
+cp docker-compose-sample.yml docker-compose.yml
+
+# Start all services (trader + dashboard + database)
+docker-compose up -d
+
+# Access the dashboard at http://localhost:8000
+```
+
+**What you get:**
+- Trading bot running in the background
+- Web dashboard for monitoring and configuration
+- PostgreSQL database with initialized schema
+- All services networked together
+
+### Alternative: Manual Setup
+
 Prepare your PostgreSQL database by using the `init_db.sql` file. This will create the necessary tables and schema.
 
 Use the supplied config.json.template file for your CoinBase API credentials, database connection settings, and other configurations. \
@@ -89,11 +116,36 @@ Make sure to rename it to `config.json` and fill in your details and place it in
    docker run -d --name cryptobot-trader royen99/cryptobot-trader
    ```
 
-When adding coins to the `config.json` file, ensure you follow the same structure as the sample entries.
-Each coin should have its own section with the necessary parameters.
+### 🆕 Database-Driven Coin Configuration
+
+**Coin-specific settings have been moved to the database** for runtime reconfigurability without code restarts! 🚀
+
+The `coins` section in `config.json` is now **deprecated**. All coin settings (buy/sell thresholds, windows, precision, etc.) are stored in the `coin_settings` table.
+
+**Managing Coins:**
+- View all: `SELECT * FROM coin_settings;`
+- Enable/disable: `UPDATE coin_settings SET enabled = FALSE WHERE symbol = 'XRP';`
+- Add new: See `migrations/README.md` for SQL examples
+- Update thresholds: `UPDATE coin_settings SET buy_percentage = -4 WHERE symbol = 'ETH';`
 
 Take care of the proper `precision` settings for each coin (`price` and `amount`).
 When in doubt, you can check the Coinbase API documentation ([XRP Example](https://api.exchange.coinbase.com/currencies/XRP)) for the correct values.
+
+## Web Dashboard 📊
+
+The built-in dashboard provides a modern web interface for monitoring and controlling your trading bot:
+
+**Features:**
+- 💼 **Real-time Holdings**: Portfolio value, unrealized P&L, weighted average buy prices
+- 📊 **Trade History**: Complete log of buy/sell executions with timestamps
+- ⚙️ **Coin Settings Editor**: Adjust thresholds, windows, and precision on-the-fly
+- 🎯 **Manual Trading**: Send immediate BUY/SELL commands to the bot
+- 📈 **Performance Stats**: Total profit, trade counts, per-coin performance
+- 🔄 **Auto-refresh**: Live updates every 30 seconds
+
+**Access:** http://localhost:8000 (when using docker-compose)
+
+**Documentation:** See [dashboard/README.md](dashboard/README.md) for detailed usage, API reference, and customization options.
 
 ## Pair with Cryptobot Monitor
 
@@ -119,25 +171,29 @@ Option | Description
 `trail_percent` | The percentage for the trailing stop (default: 1).
 `telegram` | Telegram bot settings.
 `database` | Database connection settings.
-`coins` | Configuration for each coin to trade.
+`coins` | ⚠️ **DEPRECATED** — Coin configuration moved to database (`coin_settings` table).
 
-### Coin specific options
+### Coin specific options (Database: `coin_settings` table)
 
 Option | Description
 --- | ---
 `enabled` | Whether trading is enabled for this coin (default: true).
-`trail_percent` | The percentage for the trailing stop (default: 1).
-`buy_percentage` | The percentage of the account balance to use for buying (default: -4).
-`sell_percentage` | The percentage of the coin balance to use for selling (default: 3).
+`trail_percent` | The percentage for the trailing stop (default: 0.5).
+`buy_percentage` | The percentage threshold for buying (default: -3 for ETH).
+`sell_percentage` | The percentage threshold for selling (default: 3 for ETH).
 `rebuy_discount` | The percentage discount for rebuying (default: 2).
-`volatility_window` | The window size for calculating volatility (default: 20).
-`trend_window` | The window size for calculating trend (default: 200).
+`volatility_window` | The window size for calculating volatility (default: 10).
+`trend_window` | The window size for calculating trend (default: 26).
 `macd_short_window` | The short window size for MACD (default: 12).
 `macd_long_window` | The long window size for MACD (default: 26).
 `macd_signal_window` | The signal window size for MACD (default: 9).
-`rsi_period` | The period for RSI calculation (default: 50).
-`min_order_sizes` | The minimum order sizes for buying and selling.
-`precision` | The precision settings for price and amount.
+`rsi_period` | The period for RSI calculation (default: 14).
+`min_order_buy` | The minimum buy order size in USDC (default: 0.01).
+`min_order_sell` | The minimum sell order size in base coin (default varies).
+`precision_price` | Price decimal places (default: 2).
+`precision_amount` | Amount decimal places (default: 6).
+
+**Note:** These settings are now stored in the database. Use SQL queries to modify them at runtime.
 
 ## Donations
 If you find this project useful and would like to support its development, consider making a donation:

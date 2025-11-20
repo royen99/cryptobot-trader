@@ -16,46 +16,5 @@
     "user": "your-database-user",
     "password": "your-database-password"
   },
-  "coins": {
-    "ETH": {
-      "enabled": true,
-      "buy_percentage": -3,
-      "sell_percentage": 3,
-      "rebuy_discount": 2,
-      "volatility_window": 10,
-      "trend_window": 26,
-      "macd_short_window": 12,
-      "macd_long_window": 26,
-      "macd_signal_window": 9,
-      "rsi_period": 14,
-      "min_order_sizes": {
-        "buy": 0.01,
-        "sell": 0.0001
-      },
-      "precision": {
-          "price": 2,
-          "amount": 6
-      }
-    },
-    "XRP": {
-      "enabled": true,
-      "buy_percentage": -5,
-      "sell_percentage": 5,
-      "rebuy_discount": 1,
-      "volatility_window": 20,
-      "trend_window": 200,
-      "macd_short_window": 12,
-      "macd_long_window": 26,
-      "macd_signal_window": 9,
-      "rsi_period": 28,
-      "min_order_sizes": {
-        "buy": 0.01,
-        "sell": 1
-      },
-      "precision": {
-          "price": 2,
-          "amount": 6
-      }
-    }
-  }
+  "_comment_coins": "⚠️ Coin-specific settings have been MOVED to the database (coin_settings table). Edit them there for runtime reconfigurability without restarts! 🚀"
 }

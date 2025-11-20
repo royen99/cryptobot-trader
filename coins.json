@@ -1,0 +1,443 @@
+{
+  "coins": {
+    "AVAX": {
+      "enabled": true,
+      "trail_percent": 1,
+      "buy_percentage": -3,
+      "sell_percentage": 3,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 4,
+        "sell": 0.1
+      },
+      "precision": {
+        "price": 2,
+        "amount": 2
+      }
+    },
+    "AAVE": {
+      "enabled": true,
+      "trail_percent": 0.5,
+      "buy_percentage": -4,
+      "sell_percentage": 4,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 4,
+        "sell": 0.001
+      },
+      "precision": {
+        "price": 2,
+        "amount": 3
+      }
+    },
+    "BONK": {
+      "enabled": true,
+      "trail_percent": 1,
+      "buy_percentage": -4.5,
+      "sell_percentage": 4,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 5,
+        "sell": 100
+      },
+      "precision": {
+        "price": 8,
+        "amount":0
+      }
+    },
+    "CRO": {
+      "enabled": true,
+      "buy_percentage": -5.5,
+      "sell_percentage": 7,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 2,
+        "sell": 1
+      },
+      "precision": {
+        "price": 4,
+        "amount": 1
+      }
+    },
+    "ETH": {
+      "enabled": true,
+      "buy_percentage": -3,
+      "sell_percentage": 4,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "trail_percent": 1,
+      "min_order_sizes": {
+        "buy": 3,
+        "sell": 0.0001
+      },
+      "precision": {
+        "price": 2,
+        "amount": 6
+      }
+    },
+    "FET": {
+      "enabled": true,
+      "trail_percent": 0.5,
+      "buy_percentage": -4.8,
+      "sell_percentage": 4,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 2,
+        "sell": 0.001
+      },
+      "precision": {
+        "price": 3,
+        "amount": 1
+      }
+    },
+    "GODS": {
+      "enabled": true,
+      "trail_percent": 1,
+      "buy_percentage": -4.5,
+      "sell_percentage": 3,
+      "rebuy_discount": 4,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 5,
+        "sell": 0.01
+      },
+      "precision": {
+        "price": 5,
+        "amount": 1
+      }
+    },
+    "HBAR": {
+      "enabled": true,
+      "trail_percent": 1,
+      "buy_percentage": -3,
+      "sell_percentage": 3,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 5,
+        "sell": 0.1
+      },
+      "precision": {
+        "price": 5,
+        "amount": 1
+      }
+    },
+    "LINK": {
+      "enabled": true,
+      "buy_percentage": -4,
+      "sell_percentage": 4,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 4,
+        "sell": 0.1
+      },
+      "precision": {
+        "price": 2,
+        "amount": 2
+      }
+    },
+    "LTC": {
+      "enabled": true,
+      "trail_percent": 1,
+      "buy_percentage": -3,
+      "sell_percentage": 3,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 5,
+        "sell": 0.01
+      },
+      "precision": {
+        "price": 2,
+        "amount": 8
+      }
+    },
+    "PEPE": {
+      "enabled": true,
+      "buy_percentage": -4,
+      "sell_percentage": 3,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 2,
+        "sell": 1
+      },
+      "precision": {
+        "price": 8,
+        "amount": 0
+      }
+    },
+    "ONDO": {
+      "enabled": true,
+      "trail_percent": 1,
+      "buy_percentage": -4,
+      "sell_percentage": 4,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 10,
+        "sell": 0.1
+      },
+      "precision": {
+        "price": 6,
+        "amount": 2
+      }
+    },
+    "RENDER": {
+      "enabled": true,
+      "trail_percent": 1,
+      "buy_percentage": -3,
+      "sell_percentage": 2,
+      "rebuy_discount": 4,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 2,
+        "sell": 0.1
+      },
+      "precision": {
+        "price": 2,
+        "amount": 2
+      }
+    },
+    "SEI": {
+      "enabled": true,
+      "trail_percent": 1,
+      "buy_percentage": -3,
+      "sell_percentage": 4,
+      "rebuy_discount": 4,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 5,
+        "sell": 0.1
+      },
+      "precision": {
+        "price": 5,
+        "amount": 1
+      }
+    },
+    "SHIB": {
+      "enabled": true,
+      "trail_percent": 1,
+      "buy_percentage": -4,
+      "sell_percentage": 4,
+      "rebuy_discount": 4,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 4,
+        "sell": 1
+      },
+      "precision": {
+        "price": 8,
+        "amount": 0
+      }
+    },
+    "SOL": {
+      "enabled": true,
+      "trail_percent": 1,
+      "buy_percentage": -4,
+      "sell_percentage": 4,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 28,
+      "min_order_sizes": {
+        "buy": 1,
+        "sell": 0.001
+      },
+      "precision": {
+        "price": 2,
+        "amount": 8
+      }
+    },
+    "SUI": {
+      "enabled": true,
+      "trail_percent": 0.5,
+      "buy_percentage": -3,
+      "sell_percentage": 4,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 28,
+      "min_order_sizes": {
+        "buy": 1,
+        "sell": 0.2
+      },
+      "precision": {
+        "price": 4,
+        "amount": 1
+      }
+    },
+    "UNI": {
+      "enabled": true,
+      "trail_percent": 0.5,
+      "buy_percentage": -4,
+      "sell_percentage": 4,
+      "rebuy_discount": 4,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 2,
+        "sell": 0.2
+      },
+      "precision": {
+        "price": 3,
+        "amount": 3
+      }
+    },
+    "XCN": {
+      "enabled": true,
+      "trail_percent": 1,
+      "buy_percentage": -8,
+      "sell_percentage": 2,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 5,
+        "sell": 10
+      },
+      "precision": {
+        "price": 5,
+        "amount": 1
+      }
+    },
+    "XLM": {
+      "enabled": true,
+      "trail_percent": 1,
+      "buy_percentage": -3,
+      "sell_percentage": 3,
+      "rebuy_discount": 3,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 2,
+        "sell": 1
+      },
+      "precision": {
+        "price": 4,
+        "amount": 6
+      }
+    },
+    "XRP": {
+      "enabled": true,
+      "trail_percent": 0.5,
+      "buy_percentage": -3,
+      "sell_percentage": 4,
+      "rebuy_discount": 2,
+      "volatility_window": 20,
+      "trend_window": 200,
+      "macd_short_window": 12,
+      "macd_long_window": 26,
+      "macd_signal_window": 9,
+      "rsi_period": 50,
+      "min_order_sizes": {
+        "buy": 2,
+        "sell": 1
+      },
+      "precision": {
+        "price": 4,
+        "amount": 6
+      }
+    }
+  }
+}
+
