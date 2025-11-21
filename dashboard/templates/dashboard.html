@@ -59,6 +59,36 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #ea580c;
         }
+        
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            top: 5rem;
+            right: 1rem;
+            min-width: 300px;
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            z-index: 9999;
+            animation: slideIn 0.3s ease-out;
+            backdrop-filter: blur(12px);
+        }
+        @keyframes slideIn {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .toast-success {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(22, 163, 74, 0.95));
+            border: 1px solid rgb(34, 197, 94);
+        }
+        .toast-error {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(220, 38, 38, 0.95));
+            border: 1px solid rgb(239, 68, 68);
+        }
+        .toast-info {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95));
+            border: 1px solid rgb(59, 130, 246);
+        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 min-h-screen">
@@ -333,6 +363,26 @@
     <script>
         let currentEditSymbol = null;
         let charts = { performance: null, activity: null };
+        
+        // Toast notification system 🍞
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <div class="flex items-center space-x-3">
+                    <span class="text-2xl">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+                    <div class="flex-1">
+                        <p class="text-white font-medium">${message}</p>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
 
         // Tab switching logic 🎯
         function switchTab(tabName) {
@@ -573,15 +623,15 @@
                 });
 
                 if (res.ok) {
-                    alert(`✅ ${currentEditSymbol} settings updated! Restart bot to apply.`);
+                    showToast(`${currentEditSymbol} settings updated! Restart bot to apply.`, 'success');
                     closeEditModal();
                     await loadCoinSettings();
                 } else {
                     const err = await res.json();
-                    alert(`❌ Update failed: ${err.detail}`);
+                    showToast(`Update failed: ${err.detail}`, 'error');
                 }
             } catch (err) {
-                alert(`❌ Error: ${err.message}`);
+                showToast(`Error: ${err.message}`, 'error');
             }
         });
 
@@ -591,16 +641,14 @@
             try {
                 const res = await fetch(`/api/coins/${symbol}/toggle`, {method: 'POST'});
                 const data = await res.json();
-                alert(`✅ ${symbol} is now ${data.enabled ? 'ENABLED' : 'DISABLED'}`);
+                showToast(`${symbol} is now ${data.enabled ? 'ENABLED' : 'DISABLED'}`, 'success');
                 await loadCoinSettings();
             } catch (err) {
-                alert(`❌ Error: ${err.message}`);
+                showToast(`Error: ${err.message}`, 'error');
             }
         }
 
         async function manualTrade(symbol, action) {
-            if (!confirm(`Send manual ${action} command for ${symbol}?`)) return;
-
             try {
                 const res = await fetch('/api/manual-command', {
                     method: 'POST',
@@ -609,9 +657,9 @@
                 });
 
                 const data = await res.json();
-                alert(`✅ ${data.message}`);
+                showToast(`${action} order queued for ${symbol} 🚀`, 'info');
             } catch (err) {
-                alert(`❌ Error: ${err.message}`);
+                showToast(`Error: ${err.message}`, 'error');
             }
         }
 
