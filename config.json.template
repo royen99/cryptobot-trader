@@ -1,20 +1,40 @@
 {
-  "name": "organizations/{org_id}/apiKeys/{key_id}",
-  "privateKey": "-----BEGIN EC PRIVATE KEY-----\nYOUR PRIVATE KEY\n-----END EC PRIVATE KEY-----\n",
+  "_comment_exchange": "🔌 Multi-exchange support! Add credentials for each exchange you want to use, then set 'selected_exchange' to activate one.",
+  "exchange": {
+    "coinbase": {
+      "platform_name": "Coinbase",
+      "quote_currency": "USDC",
+      "name": "organizations/{org_id}/apiKeys/{key_id}",
+      "privateKey": "-----BEGIN EC PRIVATE KEY-----\nYOUR PRIVATE KEY\n-----END EC PRIVATE KEY-----\n"
+    },
+    "kraken": {
+      "platform_name": "Kraken",
+      "quote_currency": "USD",
+      "api_key": "YOUR_KRAKEN_API_KEY",
+      "api_secret": "YOUR_KRAKEN_API_SECRET"
+    },
+    "binance": {
+      "platform_name": "Binance",
+      "quote_currency": "USDT",
+      "api_key": "YOUR_BINANCE_API_KEY",
+      "api_secret": "YOUR_BINANCE_API_SECRET"
+    }
+  },
+  "selected_exchange": "coinbase",
   "buy_percentage": 10,
   "sell_percentage": 10,
   "stop_loss_percentage": -10,
   "telegram": {
     "enabled": true,
-    "bot_token": "your_token",
-    "chat_id": "your_chat_id"
+    "bot_token": "your_telegram_bot_token",
+    "chat_id": "your_telegram_chat_id"
   },
   "database": {
-    "host": "your-database-host",
-    "port": "your-database-port",
-    "name": "your-database-name",
-    "user": "your-database-user",
-    "password": "your-database-password"
+    "host": "db",
+    "port": 5432,
+    "name": "cryptobot",
+    "user": "trader",
+    "password": "your-secure-password"
   },
-  "_comment_coins": "⚠️ Coin-specific settings have been MOVED to the database (coin_settings table). Edit them there for runtime reconfigurability without restarts! 🚀"
+  "_comment_coins": "⚠️ Coin-specific settings have been MOVED to the database (coin_settings table). Edit them via the dashboard for runtime reconfigurability without restarts! 🚀"
 }

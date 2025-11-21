@@ -44,6 +44,20 @@ def get_db_connection():
         password=DB_PASSWORD
     )
 
+def get_quote_currency():
+    """Read quote currency from config.json based on selected exchange."""
+    import json
+    config_path = os.getenv("CONFIG_PATH", "/config/config.json")
+    try:
+        with open(config_path, "r") as f:
+            config = json.load(f)
+            selected_exchange = config.get("selected_exchange", "coinbase")
+            exchange_config = config.get("exchange", {}).get(selected_exchange, {})
+            return exchange_config.get("quote_currency", "USDC")
+    except Exception as e:
+        print(f"⚠️ Failed to read quote currency from config: {e}")
+        return "USDC"  # Default fallback
+
 # Pydantic models for request validation
 class CoinSettingsUpdate(BaseModel):
     buy_percentage: Optional[float] = None
@@ -97,11 +111,15 @@ async def get_overview():
         cursor.execute("SELECT COUNT(*) as count FROM coin_settings WHERE enabled = TRUE")
         active_coins = cursor.fetchone()["count"]
         
+        # Get quote currency from config
+        quote_currency = get_quote_currency()
+        
         return {
             "balances": balances,
             "total_profit_usdc": round(total_profit, 2),
             "total_trades": total_trades,
             "active_coins": active_coins,
+            "quote_currency": quote_currency,
             "timestamp": datetime.utcnow().isoformat()
         }
     finally:

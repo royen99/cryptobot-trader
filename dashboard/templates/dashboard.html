@@ -175,10 +175,10 @@
                 
                 <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700 hover:border-primary transition-all">
                     <div class="flex items-center justify-between mb-2">
-                        <span class="text-gray-400 text-sm font-medium">USDC Balance</span>
+                        <span class="text-gray-400 text-sm font-medium" id="quote-currency-label">Balance</span>
                         <span class="text-2xl">💵</span>
                     </div>
-                    <div class="text-3xl font-bold text-white mb-1" id="usdc-balance">$0.00</div>
+                    <div class="text-3xl font-bold text-white mb-1" id="quote-balance">$0.00</div>
                     <div class="text-xs text-gray-500">Available to trade</div>
                 </div>
             </div>
@@ -435,11 +435,15 @@
                 const data = await res.json();
                 console.log('Overview data:', data);
                 
+                // Dynamic quote currency (USD for Kraken, USDC for Coinbase, etc.) 🪙
+                const quoteCurrency = data.quote_currency || 'USDC';
+                document.getElementById('quote-currency-label').textContent = `${quoteCurrency} Balance`;
+                
                 document.getElementById('total-profit').textContent = `$${(data.total_profit_usdc || 0).toFixed(2)}`;
                 document.getElementById('total-profit').className = 'text-3xl font-bold mb-1 ' + (data.total_profit_usdc >= 0 ? 'text-green-400' : 'text-red-400');
                 document.getElementById('total-trades').textContent = data.total_trades || 0;
                 document.getElementById('active-coins').textContent = data.active_coins || 0;
-                document.getElementById('usdc-balance').textContent = `$${(data.balances?.USDC || 0).toFixed(2)}`;
+                document.getElementById('quote-balance').textContent = `$${(data.balances?.[quoteCurrency] || 0).toFixed(2)}`;
             } catch (err) {
                 console.error('Failed to load overview:', err);
             }
