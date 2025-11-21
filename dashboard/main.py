@@ -316,9 +316,9 @@ async def get_coin_signals():
     cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     
     try:
-        # Get enabled coins with their settings
+        # Get enabled coins with their settings (including precision for proper formatting 🎯)
         cursor.execute("""
-            SELECT symbol, buy_percentage, sell_percentage, trend_window
+            SELECT symbol, buy_percentage, sell_percentage, trend_window, precision_price
             FROM coin_settings
             WHERE enabled = TRUE
             ORDER BY symbol
@@ -331,6 +331,7 @@ async def get_coin_signals():
             buy_pct = float(coin["buy_percentage"])
             sell_pct = float(coin["sell_percentage"])
             trend_window = coin["trend_window"]
+            precision_price = coin["precision_price"] or 2  # Default to 2 decimals if not set
             
             # Get current price and recent prices for momentum
             cursor.execute("""
@@ -380,24 +381,26 @@ async def get_coin_signals():
                     
                     signals.append({
                         "symbol": symbol,
-                        "current_price": round(current_price, 2),
+                        "current_price": round(current_price, precision_price),
                         "has_position": True,
                         "momentum": round(momentum, 2),
-                        "avg_buy_price": round(avg_buy_price, 2),
-                        "sell_target": round(sell_target, 2),
+                        "avg_buy_price": round(avg_buy_price, precision_price),
+                        "sell_target": round(sell_target, precision_price),
                         "distance_to_sell_pct": round(distance_to_sell, 2),
-                        "proximity_pct": round(proximity_pct, 1)
+                        "proximity_pct": round(proximity_pct, 1),
+                        "precision_price": precision_price
                     })
                 else:
                     signals.append({
                         "symbol": symbol,
-                        "current_price": round(current_price, 2),
+                        "current_price": round(current_price, precision_price),
                         "has_position": True,
                         "momentum": round(momentum, 2),
                         "avg_buy_price": None,
                         "sell_target": None,
                         "distance_to_sell_pct": 0,
-                        "proximity_pct": 0
+                        "proximity_pct": 0,
+                        "precision_price": precision_price
                     })
             else:
                 # For non-held coins: calculate distance to buy trigger
@@ -409,13 +412,14 @@ async def get_coin_signals():
                 
                 signals.append({
                     "symbol": symbol,
-                    "current_price": round(current_price, 2),
+                    "current_price": round(current_price, precision_price),
                     "has_position": False,
                     "momentum": round(momentum, 2),
-                    "recent_low": round(recent_low, 2),
-                    "buy_trigger_estimate": round(buy_trigger, 2),
+                    "recent_low": round(recent_low, precision_price),
+                    "buy_trigger_estimate": round(buy_trigger, precision_price),
                     "distance_to_buy_pct": round(distance_to_buy, 2),
-                    "proximity_pct": round(proximity_pct, 1)
+                    "proximity_pct": round(proximity_pct, 1),
+                    "precision_price": precision_price
                 })
         
         return {"signals": signals}
