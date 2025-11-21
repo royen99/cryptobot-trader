@@ -309,6 +309,120 @@ async def toggle_coin(symbol: str):
         cursor.close()
         conn.close()
 
+@app.get("/api/coin-signals")
+async def get_coin_signals():
+    """Get trading signals, momentum, and buy/sell proximity for all enabled coins. 📊"""
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
+    try:
+        # Get enabled coins with their settings
+        cursor.execute("""
+            SELECT symbol, buy_percentage, sell_percentage, trend_window
+            FROM coin_settings
+            WHERE enabled = TRUE
+            ORDER BY symbol
+        """)
+        coins = cursor.fetchall()
+        
+        signals = []
+        for coin in coins:
+            symbol = coin["symbol"]
+            buy_pct = float(coin["buy_percentage"])
+            sell_pct = float(coin["sell_percentage"])
+            trend_window = coin["trend_window"]
+            
+            # Get current price and recent prices for momentum
+            cursor.execute("""
+                SELECT price, timestamp FROM price_history
+                WHERE symbol = %s
+                ORDER BY timestamp DESC
+                LIMIT %s
+            """, (symbol, max(trend_window, 10)))
+            prices = cursor.fetchall()
+            
+            if not prices:
+                continue
+                
+            current_price = float(prices[0]["price"])
+            
+            # Calculate momentum (% change over trend window)
+            momentum = 0
+            if len(prices) >= trend_window:
+                old_price = float(prices[trend_window - 1]["price"])
+                momentum = ((current_price - old_price) / old_price) * 100
+            
+            # Check if we hold this coin
+            cursor.execute("""
+                SELECT available_balance FROM balances
+                WHERE currency = %s AND available_balance > 0
+            """, (symbol,))
+            balance_row = cursor.fetchone()
+            has_position = balance_row and float(balance_row["available_balance"]) > 0.0001
+            
+            if has_position:
+                # For held coins: calculate distance to sell target
+                cursor.execute("""
+                    SELECT AVG(price) as avg_buy_price FROM trades
+                    WHERE symbol = %s AND side = 'BUY'
+                    AND timestamp > (
+                        SELECT COALESCE(MAX(timestamp), '1970-01-01')
+                        FROM trades WHERE symbol = %s AND side = 'SELL'
+                    )
+                """, (symbol, symbol))
+                avg_row = cursor.fetchone()
+                
+                if avg_row and avg_row["avg_buy_price"]:
+                    avg_buy_price = float(avg_row["avg_buy_price"])
+                    sell_target = avg_buy_price * (1 + sell_pct / 100)
+                    distance_to_sell = ((current_price - avg_buy_price) / avg_buy_price) * 100
+                    proximity_pct = (distance_to_sell / sell_pct) * 100 if sell_pct > 0 else 0
+                    
+                    signals.append({
+                        "symbol": symbol,
+                        "current_price": round(current_price, 2),
+                        "has_position": True,
+                        "momentum": round(momentum, 2),
+                        "avg_buy_price": round(avg_buy_price, 2),
+                        "sell_target": round(sell_target, 2),
+                        "distance_to_sell_pct": round(distance_to_sell, 2),
+                        "proximity_pct": round(proximity_pct, 1)
+                    })
+                else:
+                    signals.append({
+                        "symbol": symbol,
+                        "current_price": round(current_price, 2),
+                        "has_position": True,
+                        "momentum": round(momentum, 2),
+                        "avg_buy_price": None,
+                        "sell_target": None,
+                        "distance_to_sell_pct": 0,
+                        "proximity_pct": 0
+                    })
+            else:
+                # For non-held coins: calculate distance to buy trigger
+                # Use recent low as reference (simplified - bot has more complex logic)
+                recent_low = min(float(p["price"]) for p in prices[:min(10, len(prices))])
+                buy_trigger = recent_low * (1 - buy_pct / 100)
+                distance_to_buy = ((current_price - buy_trigger) / buy_trigger) * 100
+                proximity_pct = max(0, 100 - distance_to_buy) if distance_to_buy >= 0 else 100
+                
+                signals.append({
+                    "symbol": symbol,
+                    "current_price": round(current_price, 2),
+                    "has_position": False,
+                    "momentum": round(momentum, 2),
+                    "recent_low": round(recent_low, 2),
+                    "buy_trigger_estimate": round(buy_trigger, 2),
+                    "distance_to_buy_pct": round(distance_to_buy, 2),
+                    "proximity_pct": round(proximity_pct, 1)
+                })
+        
+        return {"signals": signals}
+    finally:
+        cursor.close()
+        conn.close()
+
 @app.get("/api/trades/recent")
 async def get_recent_trades(limit: int = 50):
     """Get recent trades."""
