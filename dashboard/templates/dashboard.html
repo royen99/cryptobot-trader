@@ -338,7 +338,7 @@
         function switchTab(tabName) {
             // Hide all tab contents
             document.querySelectorAll('[id$="-tab"]').forEach(tab => {
-                tab.classList.add('hidden');
+                tab.classList.remove('active');
             });
             
             // Remove active state from all tab buttons
@@ -348,15 +348,17 @@
             });
             
             // Show selected tab
-            document.getElementById(`${tabName}-tab`).classList.remove('hidden');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
             
             // Activate button
             const activeBtn = document.querySelector(`[data-tab="${tabName}"]`);
             activeBtn.classList.remove('border-transparent', 'text-gray-400');
             activeBtn.classList.add('border-primary', 'text-primary');
             
-            // Load chart data if switching to charts tab
-            if (tabName === 'charts' && !charts.performance) {
+            // Load data when switching tabs
+            if (tabName === 'config') {
+                loadCoinSettings();
+            } else if (tabName === 'charts' && !charts.performance) {
                 initCharts();
             }
         }
