@@ -29,17 +29,7 @@ stop_loss_percentage = config.get("stop_loss_percentage", -10)  # Stop-loss thre
 
 request_host = os.getenv("REQUEST_HOST", "api.coinbase.com")
 
-# Load coin-specific settings
-coins_config = config.get("coins", {})
-crypto_symbols = [symbol for symbol, settings in coins_config.items() if settings.get("enabled", False)]
-
-# Initialize price_history with maxlen equal to the larger of volatility_window and trend_window
-price_history_maxlen = max(
-    max(settings.get("volatility_window", 10) for settings in coins_config.values()),
-    max(settings.get("trend_window", 20) for settings in coins_config.values())
-)
-
-# Database connection parameters
+# Database connection parameters (loaded early for coin config fetch)
 DB_HOST = config["database"]["host"]
 DB_PORT = config["database"]["port"]
 DB_NAME = config["database"]["name"]
@@ -56,6 +46,69 @@ def get_db_connection():
         password=DB_PASSWORD
     )
     return conn
+
+# Load coin-specific settings from database (now runtime-configurable 🚀)
+def load_coins_config_from_db():
+    """Fetch coin settings from database and return a dict matching the old JSON structure."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT symbol, enabled, buy_percentage, sell_percentage, rebuy_discount,
+                   volatility_window, trend_window, macd_short_window, macd_long_window,
+                   macd_signal_window, rsi_period, trail_percent,
+                   min_order_buy, min_order_sell, precision_price, precision_amount
+            FROM coin_settings
+        """)
+        rows = cursor.fetchall()
+        
+        coins = {}
+        for row in rows:
+            symbol = row[0]
+            coins[symbol] = {
+                "enabled": row[1],
+                "buy_percentage": float(row[2]),
+                "sell_percentage": float(row[3]),
+                "rebuy_discount": float(row[4]),
+                "volatility_window": int(row[5]),
+                "trend_window": int(row[6]),
+                "macd_short_window": int(row[7]),
+                "macd_long_window": int(row[8]),
+                "macd_signal_window": int(row[9]),
+                "rsi_period": int(row[10]),
+                "trail_percent": float(row[11]),
+                "min_order_sizes": {
+                    "buy": float(row[12]),
+                    "sell": float(row[13]),
+                },
+                "precision": {
+                    "price": int(row[14]),
+                    "amount": int(row[15]),
+                }
+            }
+        return coins
+    except Exception as e:
+        print(f"❌ Failed to load coin settings from DB: {e}")
+        print("⚠️  Falling back to empty config — check your database!")
+        return {}
+    finally:
+        cursor.close()
+        conn.close()
+
+# Load coin config from database
+coins_config = load_coins_config_from_db()
+crypto_symbols = [symbol for symbol, settings in coins_config.items() if settings.get("enabled", False)]
+
+# Initialize price_history with maxlen equal to the larger of volatility_window and trend_window
+if coins_config:
+    price_history_maxlen = max(
+        max(settings.get("volatility_window", 10) for settings in coins_config.values()),
+        max(settings.get("trend_window", 20) for settings in coins_config.values())
+    )
+else:
+    # Fallback if DB is empty (e.g., fresh install before migration)
+    price_history_maxlen = 200
+    print("⚠️  No coins configured in database. Using default price_history_maxlen=200.")
 
 # Load Telegram settings from config.json
 TELEGRAM_CONFIG = config.get("telegram", {})

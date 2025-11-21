@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryptoBot Dashboard 🚀</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#f97316',
+                        'primary-dark': '#ea580c',
+                        'primary-light': '#fb923c',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+
+        /* Tab transitions */
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Chart containers */
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #f97316;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #ea580c;
+        }
+        
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            top: 5rem;
+            right: 1rem;
+            min-width: 300px;
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            z-index: 9999;
+            animation: slideIn 0.3s ease-out;
+            backdrop-filter: blur(12px);
+        }
+        @keyframes slideIn {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .toast-success {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(22, 163, 74, 0.95));
+            border: 1px solid rgb(34, 197, 94);
+        }
+        .toast-error {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(220, 38, 38, 0.95));
+            border: 1px solid rgb(239, 68, 68);
+        }
+        .toast-info {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95));
+            border: 1px solid rgb(59, 130, 246);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 min-h-screen">
+    <!-- Navigation Bar -->
+    <nav class="bg-gray-900/50 backdrop-blur-lg border-b border-gray-700 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-primary to-primary-dark rounded-lg flex items-center justify-center text-2xl">
+                        🚀
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-white">CryptoBot Dashboard</h1>
+                        <p class="text-xs text-gray-400">Real-time Trading Monitor</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button onclick="refreshData()" class="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-white transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                    </button>
+                    <div class="text-sm text-gray-400">
+                        <span id="last-updated">Just now</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Tab Navigation -->
+    <div class="bg-gray-900/30 border-b border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex space-x-1">
+                <button onclick="switchTab('monitor')" data-tab="monitor"
+                    class="tab-button px-6 py-3 text-sm font-medium rounded-t-lg transition-all border-b-2 border-primary text-primary">
+                    📊 Monitor
+                </button>
+                <button onclick="switchTab('config')" data-tab="config"
+                    class="tab-button px-6 py-3 text-sm font-medium rounded-t-lg transition-all border-b-2 border-transparent text-gray-400 hover:text-white hover:border-primary">
+                    ⚙️ Configuration
+                </button>
+                <button onclick="switchTab('charts')" data-tab="charts"
+                    class="tab-button px-6 py-3 text-sm font-medium rounded-t-lg transition-all border-b-2 border-transparent text-gray-400 hover:text-white hover:border-primary">
+                    📈 Charts
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Monitor Tab -->
+        <div id="monitor-tab" class="tab-content active">
+            <!-- Stats Overview -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700 hover:border-primary transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-gray-400 text-sm font-medium">Total Profit</span>
+                        <span class="text-2xl">💰</span>
+                    </div>
+                    <div class="text-3xl font-bold text-white mb-1" id="total-profit">$0.00</div>
+                    <div class="text-xs text-gray-500">Lifetime earnings</div>
+                </div>
+                
+                <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700 hover:border-primary transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-gray-400 text-sm font-medium">Total Trades</span>
+                        <span class="text-2xl">📊</span>
+                    </div>
+                    <div class="text-3xl font-bold text-white mb-1" id="total-trades">0</div>
+                    <div class="text-xs text-gray-500">Buy & sell orders</div>
+                </div>
+                
+                <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700 hover:border-primary transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-gray-400 text-sm font-medium">Active Coins</span>
+                        <span class="text-2xl">🪙</span>
+                    </div>
+                    <div class="text-3xl font-bold text-white mb-1" id="active-coins">0</div>
+                    <div class="text-xs text-gray-500">Currently trading</div>
+                </div>
+                
+                <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700 hover:border-primary transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-gray-400 text-sm font-medium">USDC Balance</span>
+                        <span class="text-2xl">💵</span>
+                    </div>
+                    <div class="text-3xl font-bold text-white mb-1" id="usdc-balance">$0.00</div>
+                    <div class="text-xs text-gray-500">Available to trade</div>
+                </div>
+            </div>
+
+            <!-- Holdings Table -->
+            <div class="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden mb-8">
+                <div class="px-6 py-4 border-b border-gray-700">
+                    <h2 class="text-lg font-semibold text-white flex items-center">
+                        <span class="mr-2">💼</span> Current Holdings
+                    </h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-900/50">
+                            <tr class="text-left text-xs text-gray-400 uppercase tracking-wider">
+                                <th class="px-6 py-3">Symbol</th>
+                                <th class="px-6 py-3">Balance</th>
+                                <th class="px-6 py-3">Current Price</th>
+                                <th class="px-6 py-3">Value (USDC)</th>
+                                <th class="px-6 py-3">Avg Buy Price</th>
+                                <th class="px-6 py-3">Unrealized P&L</th>
+                                <th class="px-6 py-3">P&L %</th>
+                            </tr>
+                        </thead>
+                        <tbody id="holdings-body" class="divide-y divide-gray-700">
+                            <tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">Loading holdings...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Recent Trades -->
+            <div class="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-700">
+                    <h2 class="text-lg font-semibold text-white flex items-center">
+                        <span class="mr-2">📊</span> Recent Trades
+                    </h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-900/50">
+                            <tr class="text-left text-xs text-gray-400 uppercase tracking-wider">
+                                <th class="px-6 py-3">Time</th>
+                                <th class="px-6 py-3">Symbol</th>
+                                <th class="px-6 py-3">Side</th>
+                                <th class="px-6 py-3">Amount</th>
+                                <th class="px-6 py-3">Price</th>
+                                <th class="px-6 py-3">Value (USDC)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trades-body" class="divide-y divide-gray-700">
+                            <tr><td colspan="6" class="px-6 py-8 text-center text-gray-400">Loading trades...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration Tab -->
+        <div id="config-tab" class="tab-content hidden">
+            <div class="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-700">
+                    <h2 class="text-lg font-semibold text-white flex items-center">
+                        <span class="mr-2">⚙️</span> Coin Settings
+                    </h2>
+                    <p class="text-sm text-gray-400 mt-1">Configure trading parameters for each coin</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-900/50">
+                            <tr class="text-left text-xs text-gray-400 uppercase tracking-wider">
+                                <th class="px-6 py-3">Symbol</th>
+                                <th class="px-6 py-3">Status</th>
+                                <th class="px-6 py-3">Buy %</th>
+                                <th class="px-6 py-3">Sell %</th>
+                                <th class="px-6 py-3">Trend Window</th>
+                                <th class="px-6 py-3">Updated</th>
+                                <th class="px-6 py-3">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="settings-body" class="divide-y divide-gray-700">
+                            <tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">Loading settings...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Tab -->
+        <div id="charts-tab" class="tab-content hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-gray-800/50 rounded-xl border border-gray-700 p-6">
+                    <h3 class="text-lg font-semibold text-white mb-4">Performance by Coin</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="performance-chart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-gray-800/50 rounded-xl border border-gray-700 p-6">
+                    <h3 class="text-lg font-semibold text-white mb-4">Trade Activity (7 Days)</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="activity-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Edit Coin Modal -->
+    <div id="edit-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-xl border border-gray-700 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="px-6 py-4 border-b border-gray-700">
+                <h2 class="text-xl font-bold text-white">Edit Coin Settings: <span id="edit-symbol" class="text-primary"></span></h2>
+            </div>
+            <form id="edit-form" class="p-6 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Buy Percentage (%)</label>
+                        <input type="number" step="0.1" id="edit-buy-pct" required
+                            class="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Sell Percentage (%)</label>
+                        <input type="number" step="0.1" id="edit-sell-pct" required
+                            class="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Rebuy Discount (%)</label>
+                        <input type="number" step="0.1" id="edit-rebuy" required
+                            class="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Trail Percent (%)</label>
+                        <input type="number" step="0.1" id="edit-trail" required
+                            class="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Trend Window</label>
+                        <input type="number" id="edit-trend-window" required
+                            class="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Volatility Window</label>
+                        <input type="number" id="edit-volatility-window" required
+                            class="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">MACD Short Window</label>
+                        <input type="number" id="edit-macd-short" required
+                            class="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">MACD Long Window</label>
+                        <input type="number" id="edit-macd-long" required
+                            class="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">RSI Period</label>
+                        <input type="number" id="edit-rsi" required
+                            class="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Min Order Buy (USDC)</label>
+                        <input type="number" step="0.01" id="edit-min-buy" required
+                            class="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none">
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3 pt-4 border-t border-gray-700">
+                    <button type="button" onclick="closeEditModal()"
+                        class="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                        class="px-6 py-2 bg-gradient-to-r from-primary to-primary-dark hover:from-primary-dark hover:to-primary text-white rounded-lg transition-all">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentEditSymbol = null;
+        let charts = { performance: null, activity: null };
+        
+        // Toast notification system 🍞
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <div class="flex items-center space-x-3">
+                    <span class="text-2xl">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+                    <div class="flex-1">
+                        <p class="text-white font-medium">${message}</p>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Tab switching logic 🎯
+        function switchTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('[id$="-tab"]').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active state from all tab buttons
+            document.querySelectorAll('[data-tab]').forEach(btn => {
+                btn.classList.remove('border-primary', 'text-primary');
+                btn.classList.add('border-transparent', 'text-gray-400');
+            });
+            
+            // Show selected tab
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            
+            // Activate button
+            const activeBtn = document.querySelector(`[data-tab="${tabName}"]`);
+            activeBtn.classList.remove('border-transparent', 'text-gray-400');
+            activeBtn.classList.add('border-primary', 'text-primary');
+            
+            // Load data when switching tabs
+            if (tabName === 'config') {
+                loadCoinSettings();
+            } else if (tabName === 'charts' && !charts.performance) {
+                initCharts();
+            }
+        }
+
+        // Load all data on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshData();
+            // Auto-refresh every 30 seconds
+            setInterval(refreshData, 30000);
+        });
+
+        async function refreshData() {
+            await Promise.all([
+                loadOverview(),
+                loadHoldings(),
+                loadCoinSettings(),
+                loadRecentTrades()
+            ]);
+        }
+
+        async function loadOverview() {
+            try {
+                const res = await fetch('/api/overview');
+                const data = await res.json();
+                console.log('Overview data:', data);
+                
+                document.getElementById('total-profit').textContent = `$${(data.total_profit_usdc || 0).toFixed(2)}`;
+                document.getElementById('total-profit').className = 'text-3xl font-bold mb-1 ' + (data.total_profit_usdc >= 0 ? 'text-green-400' : 'text-red-400');
+                document.getElementById('total-trades').textContent = data.total_trades || 0;
+                document.getElementById('active-coins').textContent = data.active_coins || 0;
+                document.getElementById('usdc-balance').textContent = `$${(data.balances?.USDC || 0).toFixed(2)}`;
+            } catch (err) {
+                console.error('Failed to load overview:', err);
+            }
+        }
+
+        async function loadHoldings() {
+            try {
+                const res = await fetch('/api/holdings');
+                const data = await res.json();
+                console.log('Holdings data:', data);
+                
+                const tbody = document.getElementById('holdings-body');
+                
+                if (!data.holdings || data.holdings.length === 0) {
+                    console.log('No holdings data');
+                    tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">No holdings yet. Start trading to see your positions here! 🚀</td></tr>';
+                    return;
+                }
+                
+                // Filter out dust (≤ $1) and sort by value (highest first) 💎
+                const filteredHoldings = data.holdings
+                    .filter(h => h.value_usdc > 1)
+                    .sort((a, b) => b.value_usdc - a.value_usdc);
+                
+                console.log('Rendering', filteredHoldings.length, 'holdings (filtered from', data.holdings.length, ')');
+                
+                if (filteredHoldings.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">No significant holdings. All balances below $1 (dust).</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = filteredHoldings.map(h => `
+                    <tr class="hover:bg-gray-700/50 transition-colors">
+                        <td class="px-4 py-3 text-white font-semibold">${h.symbol}</td>
+                        <td class="px-4 py-3 text-gray-300">${h.balance}</td>
+                        <td class="px-4 py-3 text-gray-300">$${h.current_price}</td>
+                        <td class="px-4 py-3 text-white font-semibold">$${h.value_usdc}</td>
+                        <td class="px-4 py-3 text-gray-400">${h.avg_buy_price ? '$' + h.avg_buy_price : '-'}</td>
+                        <td class="px-4 py-3 ${h.unrealized_pnl >= 0 ? 'text-green-400' : 'text-red-400'} font-bold">
+                            $${h.unrealized_pnl}
+                        </td>
+                        <td class="px-4 py-3 ${h.pnl_percent >= 0 ? 'text-green-400' : 'text-red-400'} font-bold">
+                            ${h.pnl_percent >= 0 ? '+' : ''}${h.pnl_percent}%
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load holdings:', err);
+            }
+        }
+
+        async function loadCoinSettings() {
+            try {
+                const res = await fetch('/api/coins');
+                const data = await res.json();
+                console.log('Coins data:', data);
+                
+                const tbody = document.getElementById('settings-body');
+                
+                if (!data.coins || data.coins.length === 0) {
+                    console.log('No coins data');
+                    tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">No coins configured. Add coins to the database to start trading.</td></tr>';
+                    return;
+                }
+                
+                console.log('Rendering', data.coins.length, 'coins');
+                tbody.innerHTML = data.coins.map(c => `
+                    <tr class="hover:bg-gray-700/50 transition-colors">
+                        <td class="px-4 py-3 text-white font-semibold">${c.symbol}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium ${c.enabled ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
+                                ${c.enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-gray-300">${c.buy_percentage}%</td>
+                        <td class="px-4 py-3 text-gray-300">${c.sell_percentage}%</td>
+                        <td class="px-4 py-3 text-gray-300">${c.trend_window}</td>
+                        <td class="px-4 py-3 text-gray-400 text-sm">${new Date(c.updated_at).toLocaleString()}</td>
+                        <td class="px-4 py-3 space-x-2">
+                            <button onclick="editCoin('${c.symbol}', ${JSON.stringify(c).replace(/"/g, '&quot;')})"
+                                class="px-3 py-1 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg text-sm transition-colors">
+                                Edit
+                            </button>
+                            <button onclick="toggleCoin('${c.symbol}')"
+                                class="px-3 py-1 ${c.enabled ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400' : 'bg-green-500/20 hover:bg-green-500/30 text-green-400'} rounded-lg text-sm transition-colors">
+                                ${c.enabled ? 'Disable' : 'Enable'}
+                            </button>
+                            <button onclick="manualTrade('${c.symbol}', 'BUY')"
+                                class="px-3 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg text-sm transition-colors">
+                                Buy
+                            </button>
+                            <button onclick="manualTrade('${c.symbol}', 'SELL')"
+                                class="px-3 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg text-sm transition-colors">
+                                Sell
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load coin settings:', err);
+            }
+        }
+
+        async function loadRecentTrades() {
+            try {
+                const res = await fetch('/api/trades/recent?limit=20');
+                const data = await res.json();
+                console.log('Trades data:', data);
+                
+                const tbody = document.getElementById('trades-body');
+                
+                if (!data.trades || data.trades.length === 0) {
+                    console.log('No trades data');
+                    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-400">No trades yet. The bot will log trades here once it starts trading. ⏳</td></tr>';
+                    return;
+                }
+                
+                console.log('Rendering', data.trades.length, 'trades');
+                tbody.innerHTML = data.trades.map(t => `
+                    <tr class="hover:bg-gray-700/50 transition-colors">
+                        <td class="px-4 py-3 text-gray-300">${new Date(t.timestamp).toLocaleString()}</td>
+                        <td class="px-4 py-3 text-white font-semibold">${t.symbol}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 rounded-full text-xs font-bold ${t.side === 'BUY' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}">
+                                ${t.side}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-gray-300">${t.amount.toFixed(6)}</td>
+                        <td class="px-4 py-3 text-gray-300">$${t.price.toFixed(2)}</td>
+                        <td class="px-4 py-3 text-white font-semibold">$${t.value_usdc}</td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load trades:', err);
+            }
+        }
+
+        function editCoin(symbol, coinData) {
+            currentEditSymbol = symbol;
+            document.getElementById('edit-symbol').textContent = symbol;
+            document.getElementById('edit-buy-pct').value = coinData.buy_percentage;
+            document.getElementById('edit-sell-pct').value = coinData.sell_percentage;
+            document.getElementById('edit-rebuy').value = coinData.rebuy_discount;
+            document.getElementById('edit-trail').value = coinData.trail_percent || 0;
+            document.getElementById('edit-trend-window').value = coinData.trend_window;
+            document.getElementById('edit-volatility-window').value = coinData.volatility_window;
+            document.getElementById('edit-macd-short').value = coinData.macd_short_window || 12;
+            document.getElementById('edit-macd-long').value = coinData.macd_long_window || 26;
+            document.getElementById('edit-rsi').value = coinData.rsi_period || 14;
+            document.getElementById('edit-min-buy').value = coinData.min_order_buy || 1;
+            
+            document.getElementById('edit-modal').classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            document.getElementById('edit-modal').classList.add('hidden');
+            currentEditSymbol = null;
+        }
+
+        document.getElementById('edit-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const updates = {
+                buy_percentage: parseFloat(document.getElementById('edit-buy-pct').value),
+                sell_percentage: parseFloat(document.getElementById('edit-sell-pct').value),
+                rebuy_discount: parseFloat(document.getElementById('edit-rebuy').value),
+                trail_percent: parseFloat(document.getElementById('edit-trail').value),
+                trend_window: parseInt(document.getElementById('edit-trend-window').value),
+                volatility_window: parseInt(document.getElementById('edit-volatility-window').value),
+                macd_short_window: parseInt(document.getElementById('edit-macd-short').value),
+                macd_long_window: parseInt(document.getElementById('edit-macd-long').value),
+                rsi_period: parseInt(document.getElementById('edit-rsi').value),
+                min_order_buy: parseFloat(document.getElementById('edit-min-buy').value)
+            };
+
+            try {
+                const res = await fetch(`/api/coins/${currentEditSymbol}`, {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(updates)
+                });
+
+                if (res.ok) {
+                    showToast(`${currentEditSymbol} settings updated! Restart bot to apply.`, 'success');
+                    closeEditModal();
+                    await loadCoinSettings();
+                } else {
+                    const err = await res.json();
+                    showToast(`Update failed: ${err.detail}`, 'error');
+                }
+            } catch (err) {
+                showToast(`Error: ${err.message}`, 'error');
+            }
+        });
+
+        async function toggleCoin(symbol) {
+            if (!confirm(`Toggle ${symbol} trading status?`)) return;
+
+            try {
+                const res = await fetch(`/api/coins/${symbol}/toggle`, {method: 'POST'});
+                const data = await res.json();
+                showToast(`${symbol} is now ${data.enabled ? 'ENABLED' : 'DISABLED'}`, 'success');
+                await loadCoinSettings();
+            } catch (err) {
+                showToast(`Error: ${err.message}`, 'error');
+            }
+        }
+
+        async function manualTrade(symbol, action) {
+            try {
+                const res = await fetch('/api/manual-command', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({symbol, action})
+                });
+
+                const data = await res.json();
+                showToast(`${action} order queued for ${symbol} 🚀`, 'info');
+            } catch (err) {
+                showToast(`Error: ${err.message}`, 'error');
+            }
+        }
+
+        // Initialize Chart.js charts 📊
+        async function initCharts() {
+            try {
+                const res = await fetch('/api/holdings');
+                const data = await res.json();
+                
+                // Performance chart (profit by coin)
+                const perfCtx = document.getElementById('performance-chart').getContext('2d');
+                charts.performance = new Chart(perfCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.holdings.map(h => h.symbol),
+                        datasets: [{
+                            label: 'Profit ($)',
+                            data: data.holdings.map(h => h.unrealized_pnl),
+                            backgroundColor: data.holdings.map(h => 
+                                h.unrealized_pnl >= 0 ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)'
+                            ),
+                            borderColor: data.holdings.map(h => 
+                                h.unrealized_pnl >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)'
+                            ),
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            title: {
+                                display: true,
+                                text: 'Unrealized P&L by Coin',
+                                color: '#f3f4f6',
+                                font: { size: 16, weight: 'bold' }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                                ticks: { color: '#9ca3af' }
+                            },
+                            x: {
+                                grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                                ticks: { color: '#9ca3af' }
+                            }
+                        }
+                    }
+                });
+
+                // Activity chart (trade volume over time - placeholder)
+                const actCtx = document.getElementById('activity-chart').getContext('2d');
+                charts.activity = new Chart(actCtx, {
+                    type: 'line',
+                    data: {
+                        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                        datasets: [{
+                            label: 'Trade Volume ($)',
+                            data: [0, 0, 0, 0, 0, 0, 0], // TODO: aggregate from /api/trades/recent
+                            borderColor: '#f97316',
+                            backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            title: {
+                                display: true,
+                                text: '7-Day Trade Volume',
+                                color: '#f3f4f6',
+                                font: { size: 16, weight: 'bold' }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                                ticks: { color: '#9ca3af' }
+                            },
+                            x: {
+                                grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                                ticks: { color: '#9ca3af' }
+                            }
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error('Failed to initialize charts:', err);
+            }
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('edit-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'edit-modal') {
+                closeEditModal();
+            }
+        });
+
+        // 🚀 Initialize dashboard on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Dashboard initializing...');
+            // Load monitor tab data by default
+            loadOverview();
+            loadHoldings();
+            loadRecentTrades();
+            // Initialize charts
+            initCharts();
+        });
+    </script>
+</body>
+</html>

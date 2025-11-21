@@ -1,0 +1,20 @@
+# Dashboard Docker build optimization
+# Exclude unnecessary files to speed up builds
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.git/
+.gitignore
+*.md
+.vscode/
+.idea/
+*.log
+.DS_Store

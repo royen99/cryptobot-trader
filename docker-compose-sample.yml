@@ -11,3 +11,39 @@ services:
     volumes:
       # Mount your local config file (adjust path as needed)
       - ./config.json:/config/config.json:ro
+    depends_on:
+      - postgres
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    # Or use pre-built image: royen99/cryptobot-dashboard:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # Dashboard accessible at http://localhost:8000
+    environment:
+      # Database connection (no config.json needed! 🎉)
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: cryptobot
+      DB_USER: cryptobot
+      DB_PASSWORD: changeme_secure_password
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cryptobot
+      POSTGRES_USER: cryptobot
+      POSTGRES_PASSWORD: changeme_secure_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"  # Optional: expose for external DB tools
+
+volumes:
+  postgres_data:

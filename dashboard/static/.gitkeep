@@ -1,0 +1,2 @@
+# Placeholder for static assets (CSS, JS, images)
+# Directory must exist for FastAPI StaticFiles mount

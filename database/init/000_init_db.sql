@@ -244,5 +244,75 @@ CREATE INDEX idx_trades_ts_desc ON public.trades USING btree ("timestamp" DESC);
 
 
 --
+-- Name: coin_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.coin_settings (
+    symbol text NOT NULL,
+    enabled boolean DEFAULT true,
+    buy_percentage real NOT NULL,
+    sell_percentage real NOT NULL,
+    rebuy_discount real DEFAULT 2.0,
+    volatility_window integer DEFAULT 10,
+    trend_window integer DEFAULT 26,
+    macd_short_window integer DEFAULT 12,
+    macd_long_window integer DEFAULT 26,
+    macd_signal_window integer DEFAULT 9,
+    rsi_period integer DEFAULT 14,
+    trail_percent real DEFAULT 0.5,
+    min_order_buy real NOT NULL,
+    min_order_sell real NOT NULL,
+    precision_price integer DEFAULT 2,
+    precision_amount integer DEFAULT 6,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+--
+-- Name: coin_settings coin_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.coin_settings
+    ADD CONSTRAINT coin_settings_pkey PRIMARY KEY (symbol);
+
+
+--
+-- Name: idx_coin_settings_enabled; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_coin_settings_enabled ON public.coin_settings USING btree (enabled) WHERE (enabled = true);
+
+
+--
+-- Name: coin_settings trg_coin_settings_update; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE OR REPLACE FUNCTION public.update_coin_settings_timestamp()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_coin_settings_update
+BEFORE UPDATE ON public.coin_settings
+FOR EACH ROW
+EXECUTE FUNCTION public.update_coin_settings_timestamp();
+
+
+--
+-- Data for Name: coin_settings; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+INSERT INTO public.coin_settings (symbol, enabled, buy_percentage, sell_percentage, rebuy_discount, volatility_window, trend_window, macd_short_window, macd_long_window, macd_signal_window, rsi_period, trail_percent, min_order_buy, min_order_sell, precision_price, precision_amount) VALUES
+('ETH', true, -3, 3, 2, 10, 26, 12, 26, 9, 14, 0.5, 0.01, 0.0001, 2, 6),
+('XRP', true, -5, 5, 1, 20, 200, 12, 26, 9, 28, 0.5, 0.01, 1, 2, 6);
+
+
+--
 -- PostgreSQL database dump complete
 --
