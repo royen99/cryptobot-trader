@@ -419,19 +419,25 @@ async def get_coin_signals():
             has_position = balance_row and float(balance_row["available_balance"]) > 0.0001
             
             if has_position:
-                # For held coins: calculate distance to sell target
+                # For held coins: calculate distance to sell target using WEIGHTED average 🎯
                 cursor.execute("""
-                    SELECT AVG(price) as avg_buy_price FROM trades
+                    SELECT amount, price FROM trades
                     WHERE symbol = %s AND side = 'BUY'
                     AND timestamp > (
                         SELECT COALESCE(MAX(timestamp), '1970-01-01')
                         FROM trades WHERE symbol = %s AND side = 'SELL'
                     )
                 """, (symbol, symbol))
-                avg_row = cursor.fetchone()
+                buy_trades = cursor.fetchall()
                 
-                if avg_row and avg_row["avg_buy_price"]:
-                    avg_buy_price = float(avg_row["avg_buy_price"])
+                avg_buy_price = None
+                if buy_trades:
+                    total_amount = sum(float(t["amount"]) for t in buy_trades)
+                    if total_amount > 0:
+                        # Weighted average: sum(amount * price) / sum(amount)
+                        avg_buy_price = sum(float(t["amount"]) * float(t["price"]) for t in buy_trades) / total_amount
+                
+                if avg_buy_price:
                     sell_target = avg_buy_price * (1 + sell_pct / 100)
                     distance_to_sell = ((current_price - avg_buy_price) / avg_buy_price) * 100
                     proximity_pct = (distance_to_sell / sell_pct) * 100 if sell_pct > 0 else 0

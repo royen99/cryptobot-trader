@@ -168,10 +168,13 @@ class KrakenExchange(BaseExchange):
         Format trading pair for Kraken (e.g., BTC/USDC -> XBTUSDC).
         Kraken uses XXBT for BTC and other quirks.
         """
-        # Kraken's special naming
+        # Kraken's special naming (because consistency is overrated 😜)
         symbol_map = {
             "BTC": "XBT",
             "DOGE": "XDG",
+            "XLM": "XLM",  # Stellar Lumens (becomes XXLM in API)
+            "XRP": "XRP", # Ripple
+            "XCN": "XCN", # Chainlink
         }
         
         base = symbol_map.get(symbol, symbol)
@@ -218,11 +221,17 @@ class KrakenExchange(BaseExchange):
                 # Strip leading X or Z
                 clean_currency = currency.lstrip("XZ")
                 
-                # Map back to standard names
+                # Map back to standard names (because Kraken likes to be special 🐙)
                 if clean_currency == "BT":
                     clean_currency = "BTC"
                 elif clean_currency == "DG":
                     clean_currency = "DOGE"
+                elif clean_currency == "LM":
+                    clean_currency = "XLM"
+                elif clean_currency == "RP":
+                    clean_currency = "XRP"
+                elif clean_currency == "CN":
+                    clean_currency = "XCN"
                 
                 balances[clean_currency] = float(balance)
         
