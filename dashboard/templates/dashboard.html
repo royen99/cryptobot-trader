@@ -239,6 +239,42 @@
 
         <!-- Configuration Tab -->
         <div id="config-tab" class="tab-content hidden">
+            <!-- Add New Coin Section -->
+            <div class="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden mb-6">
+                <div class="px-6 py-4 border-b border-gray-700">
+                    <h2 class="text-lg font-semibold text-white flex items-center">
+                        <span class="mr-2">➕</span> Add New Coin
+                    </h2>
+                    <p class="text-sm text-gray-400 mt-1">
+                        New coins use <strong class="text-orange-400">Conservative Trend-Following</strong> defaults: 
+                        Trend 200 | MACD 50/100/9 | RSI 50 | Trail 2% | Buy/Sell -3%/+4%
+                    </p>
+                </div>
+                <div class="px-6 py-4">
+                    <form id="add-coin-form" class="flex gap-4 items-end">
+                        <div class="flex-1">
+                            <label class="block text-sm font-medium text-gray-300 mb-1">Symbol</label>
+                            <input type="text" id="new-coin-symbol" 
+                                   class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                   placeholder="e.g., BTC, ETH, SOL" required>
+                        </div>
+                        <div class="w-32">
+                            <label class="block text-sm font-medium text-gray-300 mb-1">Price Precision</label>
+                            <input type="number" id="new-coin-precision-price" value="2" min="0" max="10"
+                                   class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-orange-500">
+                        </div>
+                        <div class="w-32">
+                            <label class="block text-sm font-medium text-gray-300 mb-1">Amount Precision</label>
+                            <input type="number" id="new-coin-precision-amount" value="6" min="0" max="10"
+                                   class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-orange-500">
+                        </div>
+                        <button type="submit" class="px-6 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors">
+                            Add Coin
+                        </button>
+                    </form>
+                </div>
+            </div>
+
             <div class="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-700">
                     <h2 class="text-lg font-semibold text-white flex items-center">
@@ -599,6 +635,42 @@
             }
         }
 
+        // Handle Add New Coin form submission 🚀
+        document.getElementById('add-coin-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const symbol = document.getElementById('new-coin-symbol').value.trim().toUpperCase();
+            const precisionPrice = parseInt(document.getElementById('new-coin-precision-price').value);
+            const precisionAmount = parseInt(document.getElementById('new-coin-precision-amount').value);
+            
+            if (!symbol) {
+                showToast('Please enter a coin symbol', 'error');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/coins?symbol=${symbol}&precision_price=${precisionPrice}&precision_amount=${precisionAmount}`, {
+                    method: 'POST'
+                });
+                
+                const data = await res.json();
+                
+                if (!res.ok) {
+                    showToast(data.detail || 'Failed to add coin', 'error');
+                    return;
+                }
+                
+                showToast(`✅ ${symbol} added with Conservative Trend-Following settings!`, 'success');
+                document.getElementById('new-coin-symbol').value = '';
+                document.getElementById('new-coin-precision-price').value = '2';
+                document.getElementById('new-coin-precision-amount').value = '6';
+                loadCoinSettings(); // Reload the table
+            } catch (err) {
+                console.error('Failed to add coin:', err);
+                showToast('Failed to add coin. Check console for details.', 'error');
+            }
+        });
+
         function editCoin(symbol, coinData) {
             currentEditSymbol = symbol;
             document.getElementById('edit-symbol').textContent = symbol;
@@ -795,13 +867,15 @@
                                         <span>Current:</span>
                                         <span class="font-semibold">$${signal.current_price.toFixed(precision)}</span>
                                     </div>
-                                    <div class="flex justify-between text-gray-400">
-                                        <span>Recent Low:</span>
-                                        <span>$${signal.recent_low.toFixed(precision)}</span>
-                                    </div>
+                                    ${signal.initial_price ? `
+                                        <div class="flex justify-between text-gray-400">
+                                            <span>Initial Price:</span>
+                                            <span>$${signal.initial_price.toFixed(precision)}</span>
+                                        </div>
+                                    ` : ''}
                                     <div class="flex justify-between text-gray-400">
                                         <span>Buy Zone:</span>
-                                        <span class="text-blue-400 font-semibold">~$${signal.buy_trigger_estimate.toFixed(precision)}</span>
+                                        <span class="text-blue-400 font-semibold">≤$${signal.buy_trigger.toFixed(precision)}</span>
                                     </div>
                                 </div>
                                 <div class="mt-3 space-y-2">
