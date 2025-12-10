@@ -22,7 +22,7 @@
   },
   "selected_exchange": "coinbase",
   "buy_percentage": 10,
-  "sell_percentage": 10,
+  "sell_percentage": 100,
   "stop_loss_percentage": -10,
   "telegram": {
     "enabled": true,

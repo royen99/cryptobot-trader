@@ -283,10 +283,10 @@ async def create_coin(symbol: str, precision_price: int = 2, precision_amount: i
                 macd_signal_window, rsi_period, trail_percent,
                 min_order_buy, min_order_sell, precision_price, precision_amount
             ) VALUES (
-                %s, TRUE, -3.0, 4.0, 1.0,
+                %s, TRUE, -3.0, 4.0, 4.0,
                 20, 200, 50, 100,
                 9, 50, 2.0,
-                10.0, 10.0, %s, %s
+                10.0, 0.01, %s, %s
             )
         """, (symbol.upper(), precision_price, precision_amount))
         conn.commit()
@@ -410,13 +410,17 @@ async def get_coin_signals():
                 old_price = float(prices[trend_window - 1]["price"])
                 momentum = ((current_price - old_price) / old_price) * 100
             
-            # Check if we hold this coin
+            # Check if we hold this coin (ignore dust < $1)
             cursor.execute("""
                 SELECT available_balance FROM balances
                 WHERE currency = %s AND available_balance > 0
             """, (symbol,))
             balance_row = cursor.fetchone()
-            has_position = balance_row and float(balance_row["available_balance"]) > 0.0001
+            
+            # Only consider it "held" if worth more than $1 (ignore dust 🧹)
+            balance = float(balance_row["available_balance"]) if balance_row else 0
+            holding_value = balance * current_price
+            has_position = holding_value > 1.0
             
             if has_position:
                 # For held coins: calculate distance to sell target using WEIGHTED average 🎯

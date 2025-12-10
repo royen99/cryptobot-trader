@@ -397,7 +397,7 @@ def save_weighted_avg_buy_price(symbol, avg_price):
             (symbol, avg_price)
         )
 
-        print(f"💾  - {symbol} Weighted Average Buy Price Updated: {avg_price:.6f} USDC")
+        print(f"💾  - {symbol} Weighted Average Buy Price Updated: $ {avg_price:.6f}")
 
     conn.commit()
     cursor.close()
@@ -535,6 +535,13 @@ macd_confirmation = {symbol: {"buy": 0, "sell": 0} for symbol in crypto_symbols}
 async def trading_bot():
     global crypto_data, macd_confirmation
 
+    # 🔄 Load coin config from database (runtime-configurable!)
+    coins_config = load_coins_config_from_db()
+    crypto_symbols = [symbol for symbol, settings in coins_config.items() if settings.get("enabled", False)]
+    
+    # Initialize MACD confirmation dict for all enabled coins
+    macd_confirmation = {symbol: {"buy": 0, "sell": 0} for symbol in crypto_symbols}
+
     # Initialize initial prices for all cryptocurrencies
     for symbol in crypto_symbols:
         state = load_state(symbol)
@@ -556,6 +563,15 @@ async def trading_bot():
 
     while True:
         await asyncio.sleep(25)  # Wait before checking prices again
+
+        # 🔄 Reload coin config from database (picks up dashboard changes without restart!)
+        coins_config = load_coins_config_from_db()
+        crypto_symbols = [symbol for symbol, settings in coins_config.items() if settings.get("enabled", False)]
+        
+        # Update MACD confirmation dict if new coins were added
+        for symbol in crypto_symbols:
+            if symbol not in macd_confirmation:
+                macd_confirmation[symbol] = {"buy": 0, "sell": 0}
 
         # Fetch balances
         balances = await get_balances()
@@ -587,7 +603,7 @@ async def trading_bot():
             if not crypto_data[symbol]["price_history"]:
                 print(f"🚨 {symbol}: Empty price_history. Skipping.")
                 continue
-            if current_price == crypto_data[symbol]["price_history"][-1]:
+            if current_price == crypto_data[symbol]["price_history"][-1] and crypto_data[symbol].get("manual_cmd") is None:
                 print(f"🚨 {symbol}: Price unchanged ({current_price:.{price_precision}f} == {crypto_data[symbol]['price_history'][-1]:.{price_precision}f}). Skipping.")
                 continue
 
@@ -962,10 +978,14 @@ async def trading_bot():
             else:
                 deviation = abs(current_price - moving_avg)  # Calculate deviation
                 deviation_percentage = (deviation / moving_avg) * 100  # Convert to percentage
-                message = f"🚀 Large deviation for {symbol} - {deviation_percentage:.2f}%, Current Price: {current_price:.{price_precision}f} USDC"
+                message = f"🔥 Large deviation for {symbol} - {deviation_percentage:.2f}%, Current Price: {current_price:.{price_precision}f} USDC"
                 print(f"🔥  - {symbol} Skipping trade: Price deviation too high!")
                 print(f"📊  - Moving Average: {moving_avg:.{price_precision}f}, Current Price: {current_price:.{price_precision}f}")
                 print(f"📉  - Deviation: {deviation:.2f} ({deviation_percentage:.2f}%)")
+
+                # If deviation is more then 10% and it is a positive trend, send a telegram notification
+                if deviation_percentage > 10 and current_price > moving_avg:
+                    send_telegram_notification(message)
 
             print(f"📊  - {symbol} Avg buy price: {actual_buy_price} | Performance - Total Trades: {crypto_data[symbol]['total_trades']} | Total Profit: ${crypto_data[symbol]['total_profit']:.2f}")
             crypto_data[symbol]["manual_cmd"] = None  # Set to None at the start of each cycle

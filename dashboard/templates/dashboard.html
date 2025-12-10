@@ -783,7 +783,8 @@
                 
                 // Helper: Get proximity badge for sell target (held coins) 🎯
                 function getSellProximityBadge(proximityPct) {
-                    if (proximityPct >= 90) return { color: 'bg-green-500/30 text-green-400 border-green-500', emoji: '🎯', label: 'Ready to Sell!' };
+                    if (proximityPct >= 100) return { color: 'bg-green-600 text-green-100 border-green-600', emoji: '🏆', label: 'Target Hit!' };
+                    if (proximityPct >= 95) return { color: 'bg-green-500/30 text-green-400 border-green-500', emoji: '🎯', label: 'Ready to Sell!' };
                     if (proximityPct >= 70) return { color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50', emoji: '⚠️', label: 'Close to Target' };
                     if (proximityPct >= 50) return { color: 'bg-blue-500/20 text-blue-400 border-blue-500/50', emoji: '🔵', label: 'Halfway' };
                     if (proximityPct >= 25) return { color: 'bg-gray-500/20 text-gray-400 border-gray-500/50', emoji: '⏳', label: 'Building' };
@@ -792,7 +793,7 @@
                 
                 // Helper: Get proximity badge for buy trigger (non-held coins) 💰
                 function getBuyProximityBadge(proximityPct, distanceToBuy) {
-                    if (distanceToBuy < -2) return { color: 'bg-green-500/30 text-green-400 border-green-500', emoji: '💰', label: 'Buy Signal!' };
+                    if (distanceToBuy < -1) return { color: 'bg-green-500/30 text-green-400 border-green-500', emoji: '💰', label: 'Buy Signal!' };
                     if (distanceToBuy < 2) return { color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50', emoji: '👀', label: 'Watching' };
                     if (distanceToBuy < 5) return { color: 'bg-blue-500/20 text-blue-400 border-blue-500/50', emoji: '🔍', label: 'Near Entry' };
                     return { color: 'bg-gray-500/10 text-gray-500 border-gray-500/30', emoji: '⌛', label: 'Waiting' };

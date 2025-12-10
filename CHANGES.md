@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [19/11/2025]
 
 ### Added
+- **Multiple Exchange Support**: Added Kraken exchange integration alongside existing Coinbase support.
+  - Allowes selection between exchanges via `config.json` setting.
+  - Support for exchange-specific authentication, rate limiting, and order types.
+  - Allows different quote currencies per exchange (e.g., USDC for Coinbase, USD for Kraken).
+- **Telegram Notifications**: Implemented Telegram bot notifications for significant price deviations (>10%).
 - **Database-driven coin configuration**: Coin-specific settings moved from `config.json` to new `coin_settings` table.
 - **Web Dashboard**: FastAPI-based monitoring and configuration UI (`dashboard/` directory).
   - Real-time holdings with unrealized P&L tracking
