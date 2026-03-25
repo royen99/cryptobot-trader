@@ -1,6 +1,6 @@
 # Cryptobot trader
 
-Dockerized auto crypto-coin trader based on Coinbase (uses CoinBase's Advanced Trade API).
+Dockerized auto crypto-coin trader based on Coinbase/Kraken APIs.
 
 [![Docker Image Version (latest by date)](https://img.shields.io/docker/v/royen99/cryptobot-trader?logo=docker)](https://hub.docker.com/r/royen99/cryptobot-trader)
 [![Docker Pulls](https://img.shields.io/docker/pulls/royen99/cryptobot-trader?logo=docker)](https://hub.docker.com/r/royen99/cryptobot-trader)
@@ -17,17 +17,43 @@ Dockerized auto crypto-coin trader based on Coinbase (uses CoinBase's Advanced T
 ✅ **Built-in Web Dashboard** for real-time monitoring, holdings tracking, and configuration management. \
 ✅ Integrates with the [CryptoBot-Monitor](https://github.com/royen99/cryptobot-monitor) dashboard for real-time monitoring and alerts. \
 ✅ Supports multiple cryptocurrencies with **database-driven settings** (runtime reconfigurable). \
-✅ Telegram bot integration for notifications on buy/sell actions.
+✅ Telegram bot integration for notifications on buy/sell actions.\
+✅ Implements a trading strategy based on price changes, MACD, RSI, and Bollinger Bands. \
+✅ Supports CoinBase's Advanced Trade API and Kraken API (with some adjustments).
 
 ## How It Works
 
 All scripts need at least a `config.json` file that has your Coinbase API credentials and a 
 
 ### Config Example (config.json)
+
+#### CoinBase API Key Example
 ```json
 {
-    "name": "organizations/{org_id}/apiKeys/{key_id}",
-    "privateKey": "-----BEGIN EC PRIVATE KEY-----\nYOUR PRIVATE KEY\n-----END EC PRIVATE KEY-----\n"
+  "exchange": {
+    "coinbase": {
+      "platform_name": "Coinbase",
+      "quote_currency": "USDC",
+      "name": "organizations/{org_id}/apiKeys/{key_id}",
+      "privateKey": "-----BEGIN EC PRIVATE KEY-----\nYOUR PRIVATE KEY\n-----END EC PRIVATE KEY-----\n"
+    }
+  },
+  "selected_exchange": "coinbase",
+}
+```
+
+#### Kraken API Key Example
+```json
+{
+  "exchange": {
+    "kraken": {
+      "platform_name": "Kraken",
+      "quote_currency": "USD",
+      "name": "kraken_api_key_name",
+      "privateKey": "kraken_api_key_secret"
+    }
+  },
+  "selected_exchange": "kraken",
 }
 ```
 
