@@ -1,17 +1,13 @@
-import jwt, os, aiohttp, asyncio, secrets, json, time, requests, random
-from cryptography.hazmat.primitives import serialization
+import os, asyncio, json, time, requests
 from collections import deque
 import psycopg2 # type: ignore
 from psycopg2.extras import Json # type: ignore
 from decimal import Decimal
 import pandas as pd
 import numpy as np
-from aiohttp import ClientTimeout
 
-# Network/Retry settings
-NET_MAX_RETRIES = 5
-NET_BASE_BACKOFF = 0.5   # seconds
-NET_TIMEOUT = ClientTimeout(total=12, sock_connect=6, sock_read=6)
+# Import platform abstraction 🚀
+from platforms import CoinbaseExchange, KrakenExchange
 
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False") == "True"  # Set to True for debugging
 
@@ -20,14 +16,37 @@ path = os.getenv("CONFIG_PATH", "/config/config.json")
 with open(path, "r", encoding="utf-8") as f:
     config = json.load(f)
 
-key_name = config["name"]
-key_secret = config["privateKey"]
-quote_currency = "USDC"
+# Determine which exchange to use
+selected_exchange = config.get("selected_exchange", "coinbase").lower()
+exchange_configs = config.get("exchange", {})
+
+if selected_exchange not in exchange_configs:
+    raise ValueError(f"❌ Exchange '{selected_exchange}' not found in config.json! Available: {list(exchange_configs.keys())}")
+
+exchange_config = exchange_configs[selected_exchange]
+
+# Initialize the appropriate exchange platform 🪙
+if selected_exchange == "coinbase":
+    key_name = exchange_config["name"]
+    key_secret = exchange_config["privateKey"]
+    request_host = os.getenv("REQUEST_HOST", "api.coinbase.com")
+    exchange = CoinbaseExchange(api_key=key_name, api_secret=key_secret, request_host=request_host)
+elif selected_exchange == "kraken":
+    api_key = exchange_config["api_key"]
+    api_secret = exchange_config["api_secret"]
+    exchange = KrakenExchange(api_key=api_key, api_secret=api_secret)
+else:
+    raise ValueError(f"❌ Unsupported exchange: {selected_exchange}")
+
+# Get platform-specific quote currency (USD for Kraken, USDC for Coinbase, etc.)
+quote_currency = exchange_config.get("quote_currency", "USDC")
+
+print(f"🔌 Initialized {exchange.get_platform_name()} exchange (selected: {selected_exchange}) with quote currency: {quote_currency}")
+
+# Global trading settings
 buy_percentage = config.get("buy_percentage", 10)  # % of available balance to buy
 sell_percentage = config.get("sell_percentage", 10)  # % of available balance to sell
 stop_loss_percentage = config.get("stop_loss_percentage", -10)  # Stop-loss threshold
-
-request_host = os.getenv("REQUEST_HOST", "api.coinbase.com")
 
 # Database connection parameters (loaded early for coin config fetch)
 DB_HOST = config["database"]["host"]
@@ -214,122 +233,9 @@ def load_state(symbol):
         cursor.close()
         conn.close()
 
-# Create a single session to reuse connections (better perf & fewer TLS handshakes)
-_aiohttp_session: aiohttp.ClientSession | None = None
-
-async def get_http_session() -> aiohttp.ClientSession:
-    global _aiohttp_session
-    if _aiohttp_session is None or _aiohttp_session.closed:
-        _aiohttp_session = aiohttp.ClientSession(timeout=NET_TIMEOUT)
-    return _aiohttp_session
-
-async def jitter_backoff(attempt: int) -> float:
-    # exponential backoff with a small random jitter
-    return NET_BASE_BACKOFF * (2 ** attempt) + random.uniform(0, 0.2)
-
-def build_jwt(uri):
-    """Generate a JWT token for Coinbase API authentication."""
-    private_key_bytes = key_secret.encode("utf-8")
-    private_key = serialization.load_pem_private_key(private_key_bytes, password=None)
-
-    jwt_payload = {
-        "sub": key_name,
-        "iss": "cdp",
-        "nbf": int(time.time()),
-        "exp": int(time.time()) + 120,
-        "uri": uri,
-    }
-
-    jwt_token = jwt.encode(
-        jwt_payload,
-        private_key,
-        algorithm="ES256",
-        headers={"kid": key_name, "nonce": secrets.token_hex()},
-    )
-
-    return jwt_token if isinstance(jwt_token, str) else jwt_token.decode("utf-8")
-
-async def api_request(method: str, path: str, body=None):
-    """
-    Resilient Coinbase API request with retries, backoff, and timeouts.
-    Returns parsed JSON or None on persistent failure.
-    """
-    session = await get_http_session()
-    uri = f"{method} {request_host}{path}"
-    jwt_token = build_jwt(uri)
-
-    headers = {
-        "Authorization": f"Bearer {jwt_token}",
-        "Content-Type": "application/json",
-        "CB-VERSION": "2024-02-05",
-    }
-
-    url = f"https://{request_host}{path}"
-    last_err = None
-
-    for attempt in range(NET_MAX_RETRIES):
-        try:
-            async with session.request(method, url, headers=headers, json=body) as resp:
-                # Happy path
-                if 200 <= resp.status < 300:
-                    # some coinbase endpoints return empty body on 204
-                    return await (resp.json() if resp.content_type == "application/json" else resp.text())
-
-                # Rate limited -> honor Retry-After header if present
-                if resp.status == 429:
-                    retry_after = resp.headers.get("Retry-After")
-                    wait = float(retry_after) if retry_after else await jitter_backoff(attempt)
-                    print(f"⏳ 429 Too Many Requests. Retrying after {wait:.2f}s (attempt {attempt+1}/{NET_MAX_RETRIES})")
-                    await asyncio.sleep(wait)
-                    continue
-
-                # Transient server errors -> retry
-                if resp.status >= 500:
-                    wait = await jitter_backoff(attempt)
-                    text = await resp.text()
-                    print(f"⚠️ Server error {resp.status}: {text[:200]}... Retrying in {wait:.2f}s (attempt {attempt+1}/{NET_MAX_RETRIES})")
-                    await asyncio.sleep(wait)
-                    continue
-
-                # Client errors (400-499 excluding 429) -> usually don't retry
-                text = await resp.text()
-                print(f"❌ API request failed: {resp.status} {text[:300]}")
-                return None
-
-        except asyncio.CancelledError:
-            # If the process is being shut down, propagate the cancellation
-            raise
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            last_err = e
-            wait = await jitter_backoff(attempt)
-            print(f"🌐 Network/timeout error: {type(e).__name__}: {e}. Retrying in {wait:.2f}s (attempt {attempt+1}/{NET_MAX_RETRIES})")
-            await asyncio.sleep(wait)
-        except Exception as e:
-            last_err = e
-            print(f"❗ Unexpected error during api_request: {e}")
-            break
-
-    print(f"🚫 Giving up after {NET_MAX_RETRIES} attempts. Last error: {last_err}")
-    return None
-
 async def get_crypto_price(crypto_symbol: str):
-    """Fetch cryptocurrency price from Coinbase. Returns float or None."""
-    data = await api_request("GET", f"/api/v3/brokerage/products/{crypto_symbol}-{quote_currency}")
-    if not data:
-        print(f"⚠️ Failed to fetch {crypto_symbol} price (no data).")
-        return None
-
-    # Adapt to actual payload (Coinbase product endpoint often returns nested product info)
-    try:
-        if "price" in data:
-            return float(data["price"])
-        if "product" in data and "price" in data["product"]:
-            return float(data["product"]["price"])
-    except Exception as e:
-        print(f"⚠️ Malformed price response for {crypto_symbol}: {e} -> {str(data)[:200]}")
-
-    print(f"⚠️ Price not found in response for {crypto_symbol}.")
-    return None
+    """Fetch cryptocurrency price using the exchange platform."""
+    return await exchange.get_price(crypto_symbol, quote_currency)
 
 def update_balances(balances):
     """Update the balances table in the database with the provided balances."""
@@ -352,91 +258,30 @@ def update_balances(balances):
         conn.close()
 
 async def get_balances():
-    """Fetch balances from Coinbase and return them as a dictionary."""
-    path = "/api/v3/brokerage/accounts"
-    data = await api_request("GET", path)  # Await the API request
-    
-    balances = {}
-    if "accounts" in data:
-        for account in data["accounts"]:
-            currency = account["currency"]
-            available_balance = float(account["available_balance"]["value"])
-            balances[currency] = available_balance
-    
-    return balances
+    """Fetch balances using the exchange platform."""
+    return await exchange.get_balances()
 
 async def place_order(crypto_symbol, side, amount, current_price):
-    """Place a buy/sell order for the specified cryptocurrency asynchronously."""
-    path = "/api/v3/brokerage/orders"
-    
-    order_data = {
-        "client_order_id": secrets.token_hex(16),
-        "product_id": f"{crypto_symbol}-{quote_currency}",
-        "side": side,
-        "order_configuration": {
-            "market_market_ioc": {}
-        }
-    }
-    
+    """Place a buy/sell order using the exchange platform."""
     min_order_sizes = coins_config[crypto_symbol]["min_order_sizes"]
+    precision = coins_config[crypto_symbol]["precision"]
     
-    if side == "BUY":
-        # Get precision settings for this coin
-        amount_precision = coins_config[crypto_symbol].get("precision", {}).get("amount", 6)
-
-        # Calculate total cost in USDC **before** rounding amount
-        quote_cost = round(current_price * amount, 2)
-
-        # Ensure buy order is above minimum required buy amount
-        if quote_cost < min_order_sizes["buy"]:
-            print(f"🚫  - Buy order too small: ${quote_cost} (minimum: ${min_order_sizes['buy']})")
-            return False
-        
-        # Round amount according to precision
-        rounded_amount = round(amount, amount_precision)
-
-        # Assign quote_size (amount in USDC) for API order
-        order_data["order_configuration"]["market_market_ioc"]["quote_size"] = str(quote_cost)
-
-    else:  # SELL
-        # Get required precision from config
-        precision = coins_config[crypto_symbol]["precision"]["amount"]
-
-        # 🔧 Round to correct precision dynamically
-        rounded_amount = round(amount, precision)
-
-        # 🚨 Ensure sell amount meets minimum order size
-        if rounded_amount < min_order_sizes["sell"]:
-            print(f"🚫  - Sell order too small: {rounded_amount:.{precision}f} {crypto_symbol} (minimum: {min_order_sizes['sell']:.{precision}f} {crypto_symbol})")
-            return False
-
-        # 🔄 Ensure the API receives the correctly formatted amount
-        order_data["order_configuration"]["market_market_ioc"]["base_size"] = str(f"{rounded_amount:.{precision}f}")
-
-        print(f"🛠️  - Adjusted Sell Amount for {crypto_symbol}: {rounded_amount:.{precision}f} (Precision: {precision})")
+    # Use the exchange platform to place the order
+    success = await exchange.place_order(
+        symbol=crypto_symbol,
+        side=side,
+        amount=amount,
+        current_price=current_price,
+        quote_currency=quote_currency,
+        min_order_sizes=min_order_sizes,
+        precision=precision
+    )
     
-    # Log the order details
-    print(f"🛠️  - Placing {side} order for {crypto_symbol}: Amount = {rounded_amount}, Price = {await get_crypto_price(crypto_symbol)}")
-
-    response = await api_request("POST", path, order_data)
-
-    if DEBUG_MODE:
-        print(f"🔄 Raw Response: {response}")  # Only log raw response in debug mode
-
-    # Handle the response
-    if response.get("success", False):
-        order_id = response["success_response"]["order_id"]
-        print(f"✅  - {side.upper()} Order Placed for {crypto_symbol}: Order ID = {order_id}")
-        
+    if success:
         # Log the trade in the database
-        current_price = await get_crypto_price(crypto_symbol)
-        if current_price:
-            await log_trade(crypto_symbol, side, rounded_amount, current_price)
-
+        await log_trade(crypto_symbol, side, amount, current_price)
         return True
     else:
-        print(f"❌  - Order Failed for {crypto_symbol}: {response.get('error', 'Unknown error')}")
-        print(f"🔄  - Raw Response: {response}")
         message = f"⚠️ Order Failed for {crypto_symbol}"
         send_telegram_notification(message)
         return False
@@ -552,7 +397,7 @@ def save_weighted_avg_buy_price(symbol, avg_price):
             (symbol, avg_price)
         )
 
-        print(f"💾  - {symbol} Weighted Average Buy Price Updated: {avg_price:.6f} USDC")
+        print(f"💾  - {symbol} Weighted Average Buy Price Updated: $ {avg_price:.6f}")
 
     conn.commit()
     cursor.close()
@@ -690,6 +535,13 @@ macd_confirmation = {symbol: {"buy": 0, "sell": 0} for symbol in crypto_symbols}
 async def trading_bot():
     global crypto_data, macd_confirmation
 
+    # 🔄 Load coin config from database (runtime-configurable!)
+    coins_config = load_coins_config_from_db()
+    crypto_symbols = [symbol for symbol, settings in coins_config.items() if settings.get("enabled", False)]
+    
+    # Initialize MACD confirmation dict for all enabled coins
+    macd_confirmation = {symbol: {"buy": 0, "sell": 0} for symbol in crypto_symbols}
+
     # Initialize initial prices for all cryptocurrencies
     for symbol in crypto_symbols:
         state = load_state(symbol)
@@ -711,6 +563,15 @@ async def trading_bot():
 
     while True:
         await asyncio.sleep(25)  # Wait before checking prices again
+
+        # 🔄 Reload coin config from database (picks up dashboard changes without restart!)
+        coins_config = load_coins_config_from_db()
+        crypto_symbols = [symbol for symbol, settings in coins_config.items() if settings.get("enabled", False)]
+        
+        # Update MACD confirmation dict if new coins were added
+        for symbol in crypto_symbols:
+            if symbol not in macd_confirmation:
+                macd_confirmation[symbol] = {"buy": 0, "sell": 0}
 
         # Fetch balances
         balances = await get_balances()
@@ -742,7 +603,7 @@ async def trading_bot():
             if not crypto_data[symbol]["price_history"]:
                 print(f"🚨 {symbol}: Empty price_history. Skipping.")
                 continue
-            if current_price == crypto_data[symbol]["price_history"][-1]:
+            if current_price == crypto_data[symbol]["price_history"][-1] and crypto_data[symbol].get("manual_cmd") is None:
                 print(f"🚨 {symbol}: Price unchanged ({current_price:.{price_precision}f} == {crypto_data[symbol]['price_history'][-1]:.{price_precision}f}). Skipping.")
                 continue
 
@@ -963,7 +824,7 @@ async def trading_bot():
                 cond_trend = (current_price < long_term_ma)
                 cond_cooldown = (time_since_last_buy > 120)
                 cond_streak = (crypto_data[symbol].get("rising_streak", 0) > 1)
-                cond_balance = (balances[quote_currency] > 0)
+                cond_balance = (balances.get(quote_currency, 0) > 0)
                 cond_manual = (crypto_data[symbol].get("manual_cmd") == "BUY")
 
                 # Full BUY condition
@@ -1022,7 +883,8 @@ async def trading_bot():
 
                 # Execute buy if condition met
                 if buy_condition:
-                    quote_cost = round((buy_percentage / 100) * balances[quote_currency], 2)  # USDC
+                    quote_balance = balances.get(quote_currency, 0)
+                    quote_cost = round((buy_percentage / 100) * quote_balance, 2)
                     if quote_cost < coins_config[symbol]["min_order_sizes"]["buy"]:
                         print(f"🚫  - Buy order too small: ${quote_cost:.2f} (minimum: ${coins_config[symbol]['min_order_sizes']['buy']})")
                         crypto_data[symbol]["manual_cmd"] = None
@@ -1116,10 +978,14 @@ async def trading_bot():
             else:
                 deviation = abs(current_price - moving_avg)  # Calculate deviation
                 deviation_percentage = (deviation / moving_avg) * 100  # Convert to percentage
-                message = f"🚀 Large deviation for {symbol} - {deviation_percentage:.2f}%, Current Price: {current_price:.{price_precision}f} USDC"
+                message = f"🔥 Large deviation for {symbol} - {deviation_percentage:.2f}%, Current Price: {current_price:.{price_precision}f} USDC"
                 print(f"🔥  - {symbol} Skipping trade: Price deviation too high!")
                 print(f"📊  - Moving Average: {moving_avg:.{price_precision}f}, Current Price: {current_price:.{price_precision}f}")
                 print(f"📉  - Deviation: {deviation:.2f} ({deviation_percentage:.2f}%)")
+
+                # If deviation is more then 10% and it is a positive trend, send a telegram notification
+                if deviation_percentage > 10 and current_price > moving_avg:
+                    send_telegram_notification(message)
 
             print(f"📊  - {symbol} Avg buy price: {actual_buy_price} | Performance - Total Trades: {crypto_data[symbol]['total_trades']} | Total Profit: ${crypto_data[symbol]['total_profit']:.2f}")
             crypto_data[symbol]["manual_cmd"] = None  # Set to None at the start of each cycle

@@ -44,6 +44,20 @@ def get_db_connection():
         password=DB_PASSWORD
     )
 
+def get_quote_currency():
+    """Read quote currency from config.json based on selected exchange."""
+    import json
+    config_path = os.getenv("CONFIG_PATH", "/config/config.json")
+    try:
+        with open(config_path, "r") as f:
+            config = json.load(f)
+            selected_exchange = config.get("selected_exchange", "coinbase")
+            exchange_config = config.get("exchange", {}).get(selected_exchange, {})
+            return exchange_config.get("quote_currency", "USDC")
+    except Exception as e:
+        print(f"⚠️ Failed to read quote currency from config: {e}")
+        return "USDC"  # Default fallback
+
 # Pydantic models for request validation
 class CoinSettingsUpdate(BaseModel):
     buy_percentage: Optional[float] = None
@@ -97,11 +111,15 @@ async def get_overview():
         cursor.execute("SELECT COUNT(*) as count FROM coin_settings WHERE enabled = TRUE")
         active_coins = cursor.fetchone()["count"]
         
+        # Get quote currency from config
+        quote_currency = get_quote_currency()
+        
         return {
             "balances": balances,
             "total_profit_usdc": round(total_profit, 2),
             "total_trades": total_trades,
             "active_coins": active_coins,
+            "quote_currency": quote_currency,
             "timestamp": datetime.utcnow().isoformat()
         }
     finally:
@@ -237,6 +255,63 @@ async def get_coin_settings():
         cursor.close()
         conn.close()
 
+@app.post("/api/coins")
+async def create_coin(symbol: str, precision_price: int = 2, precision_amount: int = 6):
+    """Create a new coin with Conservative Trend-Following defaults. 🎯
+    
+    Default settings optimized for 25-30s loop with medium-term swing trading:
+    - trend_window=200 (~1.5 hours of data)
+    - MACD 50/100/9 (aligned with trend window philosophy)
+    - RSI period=50 (matches trend analysis timeframe)
+    - trail_percent=2% (comfortable buffer for crypto volatility)
+    - buy/sell spread: -3% / +4% (7% total with fees)
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Check if coin already exists
+        cursor.execute("SELECT symbol FROM coin_settings WHERE symbol = %s", (symbol.upper(),))
+        if cursor.fetchone():
+            raise HTTPException(status_code=409, detail=f"Coin {symbol} already exists")
+        
+        # Insert with conservative defaults (because slow and steady wins the race 🐢)
+        cursor.execute("""
+            INSERT INTO coin_settings (
+                symbol, enabled, buy_percentage, sell_percentage, rebuy_discount,
+                volatility_window, trend_window, macd_short_window, macd_long_window,
+                macd_signal_window, rsi_period, trail_percent,
+                min_order_buy, min_order_sell, precision_price, precision_amount
+            ) VALUES (
+                %s, TRUE, -3.0, 4.0, 4.0,
+                20, 200, 50, 100,
+                9, 50, 2.0,
+                10.0, 0.01, %s, %s
+            )
+        """, (symbol.upper(), precision_price, precision_amount))
+        conn.commit()
+        
+        return {
+            "status": "success",
+            "message": f"Created {symbol} with Conservative Trend-Following settings",
+            "defaults": {
+                "trend_window": 200,
+                "macd": "50/100/9",
+                "rsi_period": 50,
+                "trail_percent": 2.0,
+                "buy_sell_spread": "-3% / +4%"
+            }
+        }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
 @app.patch("/api/coins/{symbol}")
 async def update_coin_settings(symbol: str, updates: CoinSettingsUpdate):
     """Update coin settings (partial update)."""
@@ -287,6 +362,160 @@ async def toggle_coin(symbol: str):
         conn.commit()
         
         return {"status": "success", "symbol": symbol, "enabled": new_state}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.get("/api/coin-signals")
+async def get_coin_signals():
+    """Get trading signals, momentum, and buy/sell proximity for all enabled coins. 📊"""
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
+    try:
+        # Get enabled coins with their settings (including precision for proper formatting 🎯)
+        cursor.execute("""
+            SELECT symbol, buy_percentage, sell_percentage, trend_window, precision_price
+            FROM coin_settings
+            WHERE enabled = TRUE
+            ORDER BY symbol
+        """)
+        coins = cursor.fetchall()
+        
+        signals = []
+        for coin in coins:
+            symbol = coin["symbol"]
+            buy_pct = float(coin["buy_percentage"])
+            sell_pct = float(coin["sell_percentage"])
+            trend_window = coin["trend_window"]
+            precision_price = coin["precision_price"] or 2  # Default to 2 decimals if not set
+            
+            # Get current price and recent prices for momentum
+            cursor.execute("""
+                SELECT price, timestamp FROM price_history
+                WHERE symbol = %s
+                ORDER BY timestamp DESC
+                LIMIT %s
+            """, (symbol, max(trend_window, 10)))
+            prices = cursor.fetchall()
+            
+            if not prices:
+                continue
+                
+            current_price = float(prices[0]["price"])
+            
+            # Calculate momentum (% change over trend window)
+            momentum = 0
+            if len(prices) >= trend_window:
+                old_price = float(prices[trend_window - 1]["price"])
+                momentum = ((current_price - old_price) / old_price) * 100
+            
+            # Check if we hold this coin (ignore dust < $1)
+            cursor.execute("""
+                SELECT available_balance FROM balances
+                WHERE currency = %s AND available_balance > 0
+            """, (symbol,))
+            balance_row = cursor.fetchone()
+            
+            # Only consider it "held" if worth more than $1 (ignore dust 🧹)
+            balance = float(balance_row["available_balance"]) if balance_row else 0
+            holding_value = balance * current_price
+            has_position = holding_value > 1.0
+            
+            if has_position:
+                # For held coins: calculate distance to sell target using WEIGHTED average 🎯
+                cursor.execute("""
+                    SELECT amount, price FROM trades
+                    WHERE symbol = %s AND side = 'BUY'
+                    AND timestamp > (
+                        SELECT COALESCE(MAX(timestamp), '1970-01-01')
+                        FROM trades WHERE symbol = %s AND side = 'SELL'
+                    )
+                """, (symbol, symbol))
+                buy_trades = cursor.fetchall()
+                
+                avg_buy_price = None
+                if buy_trades:
+                    total_amount = sum(float(t["amount"]) for t in buy_trades)
+                    if total_amount > 0:
+                        # Weighted average: sum(amount * price) / sum(amount)
+                        avg_buy_price = sum(float(t["amount"]) * float(t["price"]) for t in buy_trades) / total_amount
+                
+                if avg_buy_price:
+                    sell_target = avg_buy_price * (1 + sell_pct / 100)
+                    distance_to_sell = ((current_price - avg_buy_price) / avg_buy_price) * 100
+                    proximity_pct = (distance_to_sell / sell_pct) * 100 if sell_pct > 0 else 0
+                    
+                    signals.append({
+                        "symbol": symbol,
+                        "current_price": round(current_price, precision_price),
+                        "has_position": True,
+                        "momentum": round(momentum, 2),
+                        "avg_buy_price": round(avg_buy_price, precision_price),
+                        "sell_target": round(sell_target, precision_price),
+                        "distance_to_sell_pct": round(distance_to_sell, 2),
+                        "proximity_pct": round(proximity_pct, 1),
+                        "precision_price": precision_price
+                    })
+                else:
+                    signals.append({
+                        "symbol": symbol,
+                        "current_price": round(current_price, precision_price),
+                        "has_position": True,
+                        "momentum": round(momentum, 2),
+                        "avg_buy_price": None,
+                        "sell_target": None,
+                        "distance_to_sell_pct": 0,
+                        "proximity_pct": 0,
+                        "precision_price": precision_price
+                    })
+            else:
+                # For non-held coins: calculate distance to buy trigger using initial_price 🎯
+                cursor.execute("""
+                    SELECT initial_price FROM trading_state
+                    WHERE symbol = %s
+                """, (symbol,))
+                state_row = cursor.fetchone()
+                
+                if state_row and state_row["initial_price"]:
+                    initial_price = float(state_row["initial_price"])
+                    # Buy percentage is negative (e.g., -4%), so we add it to go lower 🎯
+                    buy_trigger = initial_price * (1 + buy_pct / 100)
+                    distance_to_buy = ((current_price - buy_trigger) / buy_trigger) * 100
+                    proximity_pct = max(0, 100 - distance_to_buy) if distance_to_buy >= 0 else 100
+                    
+                    signals.append({
+                        "symbol": symbol,
+                        "current_price": round(current_price, precision_price),
+                        "has_position": False,
+                        "momentum": round(momentum, 2),
+                        "initial_price": round(initial_price, precision_price),
+                        "buy_trigger": round(buy_trigger, precision_price),
+                        "distance_to_buy_pct": round(distance_to_buy, 2),
+                        "proximity_pct": round(proximity_pct, 1),
+                        "precision_price": precision_price
+                    })
+                else:
+                    # Fallback: No trading state yet, use recent low
+                    recent_low = min(float(p["price"]) for p in prices[:min(10, len(prices))])
+                    # Buy percentage is negative (e.g., -4%), so we add it to go lower 🎯
+                    buy_trigger = recent_low * (1 + buy_pct / 100)
+                    distance_to_buy = ((current_price - buy_trigger) / buy_trigger) * 100
+                    proximity_pct = max(0, 100 - distance_to_buy) if distance_to_buy >= 0 else 100
+                    
+                    signals.append({
+                        "symbol": symbol,
+                        "current_price": round(current_price, precision_price),
+                        "has_position": False,
+                        "momentum": round(momentum, 2),
+                        "initial_price": None,
+                        "buy_trigger": round(buy_trigger, precision_price),
+                        "distance_to_buy_pct": round(distance_to_buy, 2),
+                        "proximity_pct": round(proximity_pct, 1),
+                        "precision_price": precision_price
+                    })
+        
+        return {"signals": signals}
     finally:
         cursor.close()
         conn.close()
